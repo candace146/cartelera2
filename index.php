@@ -33,6 +33,7 @@ $default_credentials = ["username" => "admin",
 // Handle congregation setting
 if (isset($_POST['congregacion']) || isset($_GET['congregacion'])) {
     $_SESSION['congregacion'] = $_POST['congregacion'] ?? $_GET['congregacion'];
+    $congregacion = $_SESSION['congregacion'];
 }
 
 // Create admin user if init is set
@@ -68,14 +69,14 @@ if (isset($_POST['create-event'])) {
     $tema = $_POST['tema'];
     $cong = $_POST['cong'];
     $date = $_POST['eventdate'] ?? '';
-    $slug = strtolower(preg_replace('/[^a-z0-9]+/', '-', strtolower($name)));
+    $color = $_POST['color'];
 
     if (isset($_FILES['eventimage'])) {
         $imageDir = "images/";
         $imageFile = $imageDir . basename($_FILES['eventimage']['name']);
         move_uploaded_file($_FILES['eventimage']['tmp_name'], $imageFile);
 
-        $query = "INSERT INTO anuncios (nombre, path, congregacion, tema, fecha) VALUES ('$name', '$imageFile', '$cong', '$tema', '$date')";
+        $query = "INSERT INTO anuncios (nombre, path, congregacion, tema, fecha, color) VALUES ('$name', '$imageFile', '$cong', '$tema', '$date', '$color')";
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
         } else {
@@ -100,23 +101,37 @@ if  ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
         exit;
     }
     $id = $_GET['id'];
-    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn,  "SELECT * FROM `anuncios` WHERE `nombre` = '$id';"));
+    $congregacion = $_SESSION['congregacion'];
+    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn,  "SELECT * FROM `anuncios` WHERE `nombre` = '$id'  AND `congregacion` = '$congregacion' ;"));
     if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit-event'])) {
-        $nuevoNombre = $_POST['new-name'] ?? '';
-        $nuevaFecha = $_POST['new-eventdate'] ?? '';
-        $nuevaCongregacion = $_POST['new-cong'] ?? '';
-        $nuevoTema = $_POST['new-tema'] ?? '';
+        if (empty($_POST['new-name'])){
+            $nuevoNombre = $previousEventDetails['nombre'];
+        } else {
+            $nuevoNombre = $_POST['new-name'];
+        }
+        $nuevaFecha = $_POST['new-eventdate'] ?? $previousEventDetails['fecha'];
+        $nuevaCongregacion = $_POST['new-cong'] ?? $previousEventDetails['congregacion'];
+        $nuevoTema = $_POST['new-tema'] ?? $previousEventDetails['tema'];
+        $newColor = $_POST['new-color'] ?? $previousEventDetails['color'];
     
         // Si se subió una imagen, guardarla en la carpeta de imágenes
         $imageFile = '';
-        if (isset($_FILES['new-eventimage'])) {
+        if (isset($_FILES['new-eventimage']) && $_FILES['new-eventimage']['tmp_name'] != '') {
             $directorioImagen = "images/";
             $imageFile = $directorioImagen . basename($_FILES['new-eventimage']['name']);
             move_uploaded_file($_FILES['new-eventimage']['tmp_name'], $imageFile);
+
+            // Desde aca se borra la anterior imagen que se tenia bajo el anterior nombre de la congregacion correspondiente
+            $unlinkSQLQuery = "SELECT `path` FROM `anuncios` WHERE  `nombre` = '$id' AND `congregacion` = '$congregacion'";
+            $unlinkPath = mysqli_fetch_assoc(mysqli_query($conn, $unlinkSQLQuery));
+            unlink($unlinkPath['path']); 
+
+        } else {
+            $imageFile = $previousEventDetails['path'];
         }
     
         // Actualizar el evento en la base de datos
-        $query = "UPDATE `anuncios` SET `nombre` = '$nuevoNombre', `congregacion` = '$nuevaCongregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha'";
+        $query = "UPDATE `anuncios` SET `nombre` = '$nuevoNombre', `congregacion` = '$nuevaCongregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor'";
         
         // Si se subió una imagen, incluirla en la actualización
         if ($imageFile) {
@@ -143,10 +158,10 @@ if  ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) 
         header("Location: /admin");
         exit;
     }
-
+    $congregacion = $_SESSION['congregacion'];
     $id =  $_GET['id'];
     if (isset($_POST['delete-event'])){
-        $query = "DELETE FROM `anuncios` WHERE `nombre` = '$id'";
+        $query = "DELETE FROM `anuncios` WHERE `nombre` = '$id'  AND `congregacion` = '$congregacion' ";
         $result = mysqli_query($conn, $query);
         if ($result) {
             header("Location: /admin");
@@ -289,8 +304,12 @@ function createNewUser($newuser, $newpass, $newaccountcong){
             <div class="container mx-auto ">
                 <h2 class="text-2xl font-bold mb-4">Panel de administracion</h2>
                 <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                
                 <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
             </div>
+            
 
             <div class="mb-4"></div> <!-- Espaciador -->
 
@@ -334,6 +353,8 @@ function createNewUser($newuser, $newpass, $newaccountcong){
     <?php elseif($_SERVER['REQUEST_URI'] == '/admin/add-new-users'): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-10">
+            <hr class="border-t-3 border-gray-300">
+            <br>
             <div class="container mx-auto ">
                 <h2 class="text-2xl font-bold mb-4">Agregar usuarios</h2>
                 <p class="mb-4">Desde aqui agregar usuarios.</p>
@@ -358,10 +379,14 @@ function createNewUser($newuser, $newpass, $newaccountcong){
             </form>
         </section>
 
+    <!-- New users administrator panel -->
+
     <!-- Edit event form -->
     <?php elseif(str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-10">
+            <hr class="border-t-3 border-gray-300">
+            <br>
             <div class="container mx-auto">
                 <h2 class="text-2xl font-bold mb-4">Editar anuncio</h2>
                 <p class="mb-4"> Desde aqui puedes editar un anuncio. Si no hace falta editar algun campo dejalo en blanco.</p>
@@ -374,7 +399,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
             <form method="POST" action="/admin/edit-event?id=<?php echo $events['nombre']; ?>" enctype="multipart/form-data">
                 <div class="mb-4">
                         <label for="name" class="block mb-2"> Nuevo nombre del anuncio</label>
-                        <input type="text" id="name" name="new-name" required class="w-full p-2 border rounded">
+                        <input type="text" id="name" name="new-name" class="w-full p-2 border rounded">
                 </div>
                 <div class="mb-4">
                     <label for="name" class="block mb-2"> Nuevo tema del anuncio</label>
@@ -402,6 +427,10 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                         <option value="liniers">Liniers</option>
                     </select>
                 </div>
+                <div class="mb-4">
+                        <label for="cong" class="block mb-2">Nuevo color del cuadro del anuncio</label>
+                        <input type="color" name="new-color" id="color" class="p-2 border rounded">
+                    </div>
                 <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
             </form>
         </section>
@@ -410,6 +439,8 @@ function createNewUser($newuser, $newpass, $newaccountcong){
     <?php elseif ($_SERVER['REQUEST_URI'] == '/admin/new-event'): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-12">
+            <hr class="border-t-3 border-gray-300">
+            <br>
             <div class="container mx-auto ">
                 <h2 class="text-2xl font-bold mb-4">Agregar anuncio</h2>
                 <form method="POST" action="/admin/new-event" enctype="multipart/form-data">
@@ -443,6 +474,10 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                             <option value="liniers">Liniers</option>
                         </select>
                     </div>
+                    <div class="mb-4">
+                        <label for="cong" class="block mb-2">Color del cuadro del anuncio</label>
+                        <input type="color" name="color" id="color" class="p-2 border rounded">
+                    </div>
                     <button type="submit" name="create-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Añadir anuncio</button>
                 </form>
             </div>
@@ -468,6 +503,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
         <h1 class="text-3xl font-bold text-center mb-4 pt-4">
                 Cartelera de la congregación <?php echo ($_SESSION['congregacion'] == "andes") ? "Los Andes" : "Liniers"; ?>
             </h1>
+            <hr class="border-t-4 border-gray-300">
             <main class="py-12">
                 <div class="container mx-auto px-3">
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4"> <!-- Reduce el gap a 2 o 1 -->
@@ -478,7 +514,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                                     alt="<?php echo htmlspecialchars($event['nombre']); ?> Image" 
                                     class="event-image w-full h-20 object-cover" 
                                     onclick="openPopup('<?php echo $event['path']; ?>')">
-                                <div class="p-4">
+                                <div class="p-4" style="background-color: <?php echo $event['color']; ?>">
                                     <h2 class="text-1l font-bold mb-2"><?php echo htmlspecialchars($event['nombre']); ?></h2>
                                 </div>
                             </div>

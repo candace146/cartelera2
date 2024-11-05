@@ -13,41 +13,44 @@ if (!$conn) {
 }
 
 // Initialize variables
-
-
-// Is admin?
 $is_admin = isset($_SESSION['admin_id']) && $_SESSION['admin_id'];
-
-
-//cong set true to ask for images ,etc 
+$congregacion = $_SESSION['congregacion'] ?? null;
 $cong = $_GET['congregacion'] ?? null;
-
-// Init to create admin user if needed
-$init = $_GET['init'] ?? null;
-
-
-//Default credentials variables
-$default_credentials = ["username" => "admin",
-                       "password" => "password123"];
-
 // Handle congregation setting
 if (isset($_POST['congregacion']) || isset($_GET['congregacion'])) {
     $_SESSION['congregacion'] = $_POST['congregacion'] ?? $_GET['congregacion'];
     $congregacion = $_SESSION['congregacion'];
 }
 
+// Set the SQL table based on the congregation
+$sqltable = ($congregacion == 'andes') ? 'anuncios_andes' : 'anuncios_liniers';
+
+// Init to create admin user if needed
+$init = (isset($_GET['init']) && $_GET['init'] == 'True') ? true : null;
+
+// Default credentials variables
+$default_credentials = [
+    "username" => "admin",
+    "password" => "password123"
+];
+
 // Create admin user if init is set
 if ($init) {
     createAdminUser($conn, $default_credentials);
 }
-// Create new  users if addnewusers is set
-if (isset($_POST['create-new-user'])){
+
+// Create new users if addnewusers is set
+if (isset($_POST['create-new-user'])) {
     $newuser = $_POST['newusername'];
     $newpass = $_POST['newpassword'];
     $newaccountcong = $_POST['new-account-congregacion'];
 
     createNewUser($newuser, $newpass, $newaccountcong);
-    
+}
+// Redirect admins users to admin page if login  is set
+if ($is_admin && $_SERVER['REQUEST_URI'] == '/login'){
+    header('Location: /admin');
+    exit;
 }
 
 // Redirect non-admin users
@@ -57,7 +60,7 @@ if (!$is_admin && $_SERVER['REQUEST_URI'] == '/admin') {
 }
 
 // Handle login
-if ( isset($_POST['username'])&& $_POST['password'] && isset($_POST['login'])) {
+if (isset($_POST['username']) && isset($_POST['password']) && isset($_POST['login'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
     authenticate($username, $password);
@@ -67,82 +70,66 @@ if ( isset($_POST['username'])&& $_POST['password'] && isset($_POST['login'])) {
 if (isset($_POST['create-event'])) {
     $name = $_POST['eventname'];
     $tema = $_POST['tema'];
-    $cong = $_POST['cong'];
     $date = $_POST['eventdate'] ?? '';
     $color = $_POST['color'];
+    $owner = $_SESSION['username'];
+    $congregacion = $_SESSION['congregacion'];
 
     if (isset($_FILES['eventimage'])) {
         $imageDir = "images/";
         $imageFile = $imageDir . basename($_FILES['eventimage']['name']);
         move_uploaded_file($_FILES['eventimage']['tmp_name'], $imageFile);
 
-        $query = "INSERT INTO anuncios (nombre, path, congregacion, tema, fecha, color) VALUES ('$name', '$imageFile', '$cong', '$tema', '$date', '$color')";
+        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`) VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner')";
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
         } else {
-            echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: </div>" . mysqli_error($conn);
+            echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: " . mysqli_error($conn) . "</div>";
         }
     } else {
         echo "No se ha subido ninguna imagen.";
     }
 }
 
-// Handle logout
-if (isset($_POST['logout'])) {
-    session_destroy();
-    header("Location: /");
-}
 
 
 // Handle edit event
-if  ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
-    if (empty($_GET['id'])){
+if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
+    if (empty($_GET['id'])) {
         header("Location: /admin");
         exit;
     }
     $id = $_GET['id'];
-    $congregacion = $_SESSION['congregacion'];
-    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn,  "SELECT * FROM `anuncios` WHERE `nombre` = '$id'  AND `congregacion` = '$congregacion' ;"));
+    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'"));
+
     if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit-event'])) {
-        if (empty($_POST['new-name'])){
-            $nuevoNombre = $previousEventDetails['nombre'];
-        } else {
-            $nuevoNombre = $_POST['new-name'];
-        }
-        $nuevaFecha = $_POST['new-eventdate'] ?? $previousEventDetails['fecha'];
-        $nuevaCongregacion = $_POST['new-cong'] ?? $previousEventDetails['congregacion'];
-        $nuevoTema = $_POST['new-tema'] ?? $previousEventDetails['tema'];
-        $newColor = $_POST['new-color'] ?? $previousEventDetails['color'];
-    
-        // Si se subió una imagen, guardarla en la carpeta de imágenes
+        $nuevoNombre = !empty($_POST['new-name']) ? $_POST['new-name'] : $previousEventDetails['nombre'];
+        $nuevaFecha = !empty($_POST['new-eventdate']) ? $_POST['new-eventdate'] : $previousEventDetails['fecha'];
+        $nuevoTema = !empty($_POST['new-tema']) ? $_POST['new-tema'] : $previousEventDetails['tema'];
+        $newColor = !empty($_POST['new-color']) ? $_POST['new-color'] : $previousEventDetails['color'];
+        $newOwner = $_SESSION['username'];
         $imageFile = '';
+
         if (isset($_FILES['new-eventimage']) && $_FILES['new-eventimage']['tmp_name'] != '') {
             $directorioImagen = "images/";
             $imageFile = $directorioImagen . basename($_FILES['new-eventimage']['name']);
             move_uploaded_file($_FILES['new-eventimage']['tmp_name'], $imageFile);
 
-            // Desde aca se borra la anterior imagen que se tenia bajo el anterior nombre de la congregacion correspondiente
-            $unlinkSQLQuery = "SELECT `path` FROM `anuncios` WHERE  `nombre` = '$id' AND `congregacion` = '$congregacion'";
+            $unlinkSQLQuery = "SELECT `path` FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
             $unlinkPath = mysqli_fetch_assoc(mysqli_query($conn, $unlinkSQLQuery));
-            unlink($unlinkPath['path']); 
-
+            unlink($unlinkPath['path']);
         } else {
             $imageFile = $previousEventDetails['path'];
         }
-    
-        // Actualizar el evento en la base de datos
-        $query = "UPDATE `anuncios` SET `nombre` = '$nuevoNombre', `congregacion` = '$nuevaCongregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor'";
-        
-        // Si se subió una imagen, incluirla en la actualización
+
+        $query = "UPDATE $sqltable SET `nombre` = '$nuevoNombre', `congregacion` = '$congregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor', `dueño` = '$newOwner'";
+
         if ($imageFile) {
             $query .= ", `path` = '$imageFile'";
         }
-        $query .= " WHERE `nombre` = '$id'"; // Usar el nombre del evento como identificador
-    
-        // Ejecutar la consulta (asumiendo que $conn es la conexión a la base de datos)
-        $resultado = mysqli_query($conn, $query);
-    
-        if ($resultado) {
+        $query .= " WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
+
+        if (mysqli_query($conn, $query)) {
             header('Location: /admin');
             exit;
         } else {
@@ -151,37 +138,34 @@ if  ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
     }
 }
 
-// Handle  delete event
-
-if  ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
-    if (empty($_GET['id'])){
+// Handle delete event
+if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
+    if (empty($_GET['id'])) {
         header("Location: /admin");
         exit;
     }
-    $congregacion = $_SESSION['congregacion'];
-    $id =  $_GET['id'];
-    if (isset($_POST['delete-event'])){
-        $query = "DELETE FROM `anuncios` WHERE `nombre` = '$id'  AND `congregacion` = '$congregacion' ";
-        $result = mysqli_query($conn, $query);
-        if ($result) {
+    $id = $_GET['id'];
+    if (isset($_POST['delete-event'])) {
+        $query = "DELETE FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
+        if (mysqli_query($conn, $query)) {
             header("Location: /admin");
             exit();
-        }  else {   
+        } else {
             $delete_event_error = "Error al eliminar el evento: " . mysqli_error($conn);
         }
-
-
     }
-
-
-
 }
 
-
+// Handle logout
+if (isset($_POST['logout'])) {
+    session_destroy();
+    header("Location: /");
+    exit();
+}
 
 // Functions
 
-//Create admin user if init eq true
+// Create admin user if init is true
 function createAdminUser($conn, $default_credentials) {
     $sqlquery = "INSERT INTO usuarios (name, passwd) VALUES ('$default_credentials[username]', '$default_credentials[password]')";
     if (mysqli_query($conn, $sqlquery)) {
@@ -191,58 +175,29 @@ function createAdminUser($conn, $default_credentials) {
     }
 }
 
-
-// Authenticate admin input to admin in db // UPDATE FUNCTION
+// Authenticate admin input to admin in db
 function authenticate($username, $password) {
-
     global $conn;
     $sqlquery = "SELECT * FROM usuarios WHERE `name` = '$username' AND `passwd` = '$password'";
     $result = mysqli_query($conn, $sqlquery);
     $admin = mysqli_fetch_assoc($result);
-    if ($admin && $admin['passwd'] == $password){
+    if ($admin['passwd'] === $password && $admin['name'] === $username) {
         $_SESSION['congregacion'] = $admin['congregacion'];
         $_SESSION["admin_id"] = "1";
-        $is_admin = true;
+        $_SESSION['username'] = $admin['name'];
         header("Location: /admin");
         exit;
     } else {
-        echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'> Credenciales invalidas </div>";
-        $is_admin = false;
+        echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Credenciales inválidas</div>";
         $_SESSION["admin_id"] = "";
     }
 }
 
-
-// getEvents, but doesnt works, it help to get images.
-function getEvents($cong) {
-    global $conn;
-    $temas = [
-        'salidas',
-        'acomodadores_microfonistas',
-        'audio_video_plataforma',
-        'grupos',
-        'reuniones_entre_semana',
-        'reuniones_fin_semana'
-    ];
-
-    $eventsImg = [];
-    foreach ($temas as $tema) {
-        $sqlquery = "SELECT * FROM anuncios WHERE congregacion = '$cong' AND tema = '$tema';";
-        $result = mysqli_query($conn, $sqlquery);
-        if ($result) {
-            while ($row = mysqli_fetch_assoc($result)) {
-                $eventsImg[$tema][] = $row['path'];
-            }
-        }
-    }
-    return $eventsImg;
-}
-
-// getEventsExtended, it helps to get all the info, date, names, themes, not only the info
+// Get events extended
 function getEventsEx($congregacion) {
-    global $conn;
-    $congregacion = mysqli_real_escape_string($conn, $congregacion);
-    $query = "SELECT * FROM `anuncios` WHERE `congregacion` = '$congregacion';";
+    global $sqltable, $conn;
+    $congregacionSql = mysqli_real_escape_string($conn, $congregacion);
+    $query = "SELECT * FROM $sqltable WHERE `congregacion` = '$congregacionSql';";
     $result = mysqli_query($conn, $query);
     $events = [];
     while ($event = mysqli_fetch_assoc($result)) {
@@ -277,7 +232,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
 <div class="container mx-auto p-4">
 
     <!-- Login Form -->
-    <?php if ($_SERVER['REQUEST_URI'] == '/login'): ?>
+    <?php if (!$is_admin && $_SERVER['REQUEST_URI'] == '/login'): ?>
         <a href="/" class="bg-indigo-400 hover:bg-indigo-500 rounded py-2 px-4 mt-4 mb-4 text-white">Volver a la pagina principal</a>
         <section class="py-12">   
             <div class="container mx-auto">
@@ -299,10 +254,10 @@ function createNewUser($newuser, $newpass, $newaccountcong){
         </section>
 
     <!-- Admin Panel -->
-    <?php elseif ($_SERVER['REQUEST_URI'] == '/admin'): ?>
+    <?php elseif ( $is_admin && $_SERVER['REQUEST_URI'] == '/admin'): ?>
         <section class="py-12">
             <div class="container mx-auto ">
-                <h2 class="text-2xl font-bold mb-4">Panel de administracion</h2>
+                <h2 class="text-2xl font-bold mb-4">Bienvenido <?php $username = $_SESSION['username']; echo $username; ?> al panel de administracion.</h2>
                 <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
                 <hr class="border-t-3 border-gray-300">
                 <br>
@@ -325,12 +280,12 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                 <tbody>
                     <?php
                     $congregacion = $_SESSION['congregacion'];
-                    $result = mysqli_query($conn, "SELECT * FROM anuncios WHERE congregacion = '$congregacion'");
+                    $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
                     while ($events = mysqli_fetch_assoc($result)): ?>
                         <tr class="border-b border-gray-200 hover:bg-gray-100">
                             <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td>
                             <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td>
-                            <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['congregacion']); ?></td>
+                            <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td>
                             <td class="py-3 px-6 text-center">
                                 <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
                                 <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">
@@ -350,7 +305,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
         
 
     <!-- Create new user-->
-    <?php elseif($_SERVER['REQUEST_URI'] == '/admin/add-new-users'): ?>
+    <?php elseif($is_admin && $_SERVER['REQUEST_URI'] == '/admin/add-new-users'): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-10">
             <hr class="border-t-3 border-gray-300">
@@ -380,9 +335,19 @@ function createNewUser($newuser, $newpass, $newaccountcong){
         </section>
 
     <!-- New users administrator panel -->
-
+    <?php elseif ($is_admin && $_SERVER['REQUEST_URI'] == '/admin/users-panel'): ?>
+        <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+        <section class="py-10">
+            <hr class="border-t-3 border-gray-300">
+            <br>
+            <div class="border-t-3 border-gray-300">
+                <h2 class="text-2xl font-bold mb-4">Panel de administrador </h2>
+                <p class="mb-4">Desde aqui puedes ver y editar los usuarios.</p>
+            </div>
+            
+        </section>
     <!-- Edit event form -->
-    <?php elseif(str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')): ?>
+    <?php elseif($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-10">
             <hr class="border-t-3 border-gray-300">
@@ -393,9 +358,12 @@ function createNewUser($newuser, $newpass, $newaccountcong){
             </div>
             <?php 
                 $congregacion = $_SESSION['congregacion'];
-                $result = mysqli_query($conn, "SELECT * FROM anuncios WHERE congregacion = '$congregacion'");
+                $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
                 $events = mysqli_fetch_assoc($result);
             ?>
+            <div class="container mx-auto">
+                <p class="mb-4"> <b> Estas modificando el anuncio: <?php echo $_GET['id']; ?> </b> </p>
+            </div>
             <form method="POST" action="/admin/edit-event?id=<?php echo $events['nombre']; ?>" enctype="multipart/form-data">
                 <div class="mb-4">
                         <label for="name" class="block mb-2"> Nuevo nombre del anuncio</label>
@@ -421,22 +389,15 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                     <input type="file" id="image" name="new-eventimage" class="w-full p-2 border rounded">
                 </div>
                 <div class="mb-4">
-                    <label for="cong" class="block mb-2">Subido por</label>
-                    <select class="w-full p-2 border rounded" name="new-cong" id="cong">
-                        <option value="andes">Los Andes</option>
-                        <option value="liniers">Liniers</option>
-                    </select>
-                </div>
-                <div class="mb-4">
                         <label for="cong" class="block mb-2">Nuevo color del cuadro del anuncio</label>
                         <input type="color" name="new-color" id="color" class="p-2 border rounded">
-                    </div>
+                </div>
                 <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
             </form>
         </section>
 
     <!-- New Event Form -->
-    <?php elseif ($_SERVER['REQUEST_URI'] == '/admin/new-event'): ?>
+    <?php elseif ($is_admin && $_SERVER['REQUEST_URI'] == '/admin/new-event'): ?>
         <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
         <section class="py-12">
             <hr class="border-t-3 border-gray-300">
@@ -466,13 +427,6 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                     <div class="mb-4">
                         <label for="image" class="block mb-2">Imagen (PNG o JPG)</label>
                         <input type="file" id="image" name="eventimage" class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                        <label for="cong" class="block mb-2">Subido por</label>
-                        <select class="w-full p-2 border rounded" name="cong" id="cong">
-                            <option value="andes">Los Andes</option>
-                            <option value="liniers">Liniers</option>
-                        </select>
                     </div>
                     <div class="mb-4">
                         <label for="cong" class="block mb-2">Color del cuadro del anuncio</label>
@@ -507,7 +461,7 @@ function createNewUser($newuser, $newpass, $newaccountcong){
             <main class="py-12">
                 <div class="container mx-auto px-3">
                     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4"> <!-- Reduce el gap a 2 o 1 -->
-                        <?php $events = getEventsEx($_SESSION['congregacion']); ?>
+                        <?php $events = getEventsEx($_SESSION['congregacion'], $sqltable); ?>
                         <?php foreach ($events as $event): ?>
                             <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-80">
                                 <img src="<?php echo $event['path']; ?>"  

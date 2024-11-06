@@ -16,6 +16,7 @@ if (!$conn) {
 $is_admin = isset($_SESSION['admin_id']) && $_SESSION['admin_id'];
 $congregacion = $_SESSION['congregacion'] ?? null;
 $cong = $_GET['congregacion'] ?? null;
+
 // Handle congregation setting
 if (isset($_POST['congregacion']) || isset($_GET['congregacion'])) {
     $_SESSION['congregacion'] = $_POST['congregacion'] ?? $_GET['congregacion'];
@@ -44,8 +45,17 @@ if (isset($_POST['create-new-user'])) {
     $newuser = $_POST['newusername'];
     $newpass = $_POST['newpassword'];
     $newaccountcong = $_POST['new-account-congregacion'];
+    $rights = $_POST['rights'];
+    if ($rights == "lectura"){
+        $rights = "1";
+    } elseif ($rights == "lectura-escritura"){
+        $rights = "2";
+    } elseif ($rights == "all"){
+        $rights = "0";
+    }
 
-    createNewUser($newuser, $newpass, $newaccountcong);
+
+    createNewUser($newuser, $newpass, $newaccountcong, $rights);
 }
 // Redirect admins users to admin page if login  is set
 if ($is_admin && $_SERVER['REQUEST_URI'] == '/login'){
@@ -149,10 +159,29 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
         $query = "DELETE FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
         if (mysqli_query($conn, $query)) {
             header("Location: /admin");
-            exit();
+            exit;
         } else {
             $delete_event_error = "Error al eliminar el evento: " . mysqli_error($conn);
         }
+    }
+}
+
+if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUEST_URI'], '/admin/delete-user')) {
+    if (empty($_POST['delete-user'])){
+        header("Location: /admin");
+        exit;
+    }
+
+    $name = $_GET['id'];
+    if (isset($_POST['delete-user'])){
+        $query = "DELETE FROM $sqltable WHERE `nombre` = '$name' AND  `congregacion` = '$congregacion'";
+        if (mysqli_query($conn, $query)){
+            header("Location: /admin");
+            exit;
+        } else {
+            $delete_event_error = "Error al eliminar el evento: " . mysqli_error($conn);
+        }
+
     }
 }
 
@@ -167,7 +196,7 @@ if (isset($_POST['logout'])) {
 
 // Create admin user if init is true
 function createAdminUser($conn, $default_credentials) {
-    $sqlquery = "INSERT INTO usuarios (name, passwd) VALUES ('$default_credentials[username]', '$default_credentials[password]')";
+    $sqlquery = "INSERT INTO usuarios (name, passwd, rights) VALUES ('$default_credentials[username]', '$default_credentials[password]', 'admin')";
     if (mysqli_query($conn, $sqlquery)) {
         echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Usuario administrador creado exitosamente.</div>";
     } else {
@@ -185,6 +214,7 @@ function authenticate($username, $password) {
         $_SESSION['congregacion'] = $admin['congregacion'];
         $_SESSION["admin_id"] = "1";
         $_SESSION['username'] = $admin['name'];
+        $_SESSION['hasRights'] = $admin['rights'];
         header("Location: /admin");
         exit;
     } else {
@@ -206,9 +236,9 @@ function getEventsEx($congregacion) {
     return $events;
 }
 
-function createNewUser($newuser, $newpass, $newaccountcong){
+function createNewUser($newuser, $newpass, $newaccountcong, $rights){
     global $conn;
-    $query = "INSERT INTO `usuarios` (`name`, `passwd`, `congregacion`) VALUES ('$newuser', '$newpass', '$newaccountcong');";
+    $query = "INSERT INTO `usuarios` (`name`, `passwd`, `congregacion`, `rights`) VALUES ('$newuser', '$newpass', '$newaccountcong', '$rights');";
     $result = mysqli_query($conn, $query);
     if ($result) {
         echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Usuario creado exitosamente.</div>";
@@ -229,189 +259,242 @@ function createNewUser($newuser, $newpass, $newaccountcong){
     <title><?php echo $cong ? 'Cartelera' : 'Selecciona una congregación'; ?></title>
 </head>
 <body class="bg-gray-100">
-<div class="container mx-auto p-4">
+
 
     <!-- Login Form -->
     <?php if (!$is_admin && $_SERVER['REQUEST_URI'] == '/login'): ?>
-        <a href="/" class="bg-indigo-400 hover:bg-indigo-500 rounded py-2 px-4 mt-4 mb-4 text-white">Volver a la pagina principal</a>
-        <section class="py-12">   
-            <div class="container mx-auto">
-                <h2 class="text-2xl font-bold mb-4">Ingresar</h2>
-                <form method="POST" action="/login">
-                    <div class="mb-4">
-                        <label for="username" class="block mb-2">Nombre de usuario</label>
-                        <input type="text" id="username" name="username" required class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                        <label for="password" class="block mb-2">Contraseña</label>
-                        <input type="text" id="password" name="password" required class="w-full p-2 border rounded">
-                    </div>
-                    <button type="submit" name="login" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded">
-                        Ingresar
-                    </button>
-                </form>
-            </div>
-        </section>
+        <div class="container mx-auto p-4">
+            <a href="/" class="bg-indigo-400 hover:bg-indigo-500 rounded py-2 px-4 mt-4 mb-4 text-white">Volver a la pagina principal</a>
+            <section class="py-12">   
+                <div class="container mx-auto">
+                    <h2 class="text-2xl font-bold mb-4">Ingresar</h2>
+                    <form method="POST" action="/login">
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">Nombre de usuario</label>
+                            <input type="text" id="username" name="username" required class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="password" class="block mb-2">Contraseña</label>
+                            <input type="text" id="password" name="password" required class="w-full p-2 border rounded">
+                        </div>
+                        <button type="submit" name="login" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded">
+                            Ingresar
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </div>
 
     <!-- Admin Panel -->
     <?php elseif ( $is_admin && $_SERVER['REQUEST_URI'] == '/admin'): ?>
-        <section class="py-12">
-            <div class="container mx-auto ">
-                <h2 class="text-2xl font-bold mb-4">Bienvenido <?php $username = $_SESSION['username']; echo $username; ?> al panel de administracion.</h2>
-                <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
-                <hr class="border-t-3 border-gray-300">
-                <br>
+        <div class="container mx-auto p-4">
+            <section class="py-12">
+                <div class="container mx-auto ">
+                    <h2 class="text-2xl font-bold mb-4">Bienvenido <?php $username = $_SESSION['username']; echo $username; ?> al panel de administracion.</h2>
+                    <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
+                    <hr class="border-t-3 border-gray-300">
+                    <br>
+                    
+                    <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
+                </div>
                 
-                <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
-            </div>
-            
 
-            <div class="mb-4"></div> <!-- Espaciador -->
+                <div class="mb-4"></div> <!-- Espaciador -->
 
-            <table class="w-full bg-white shadow-md rounded mb-6 gap-5">
-                <thead>
-                    <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal ">
-                        <th class="py-3 px-6 text-left">Nombre</th>
-                        <th class="py-3 px-6 text-center">Tema</th>
-                        <th class="py-3 px-6 text-center">Subido por</th>
-                        <th class="py-3 px-6 text-center">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php
-                    $congregacion = $_SESSION['congregacion'];
-                    $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
-                    while ($events = mysqli_fetch_assoc($result)): ?>
-                        <tr class="border-b border-gray-200 hover:bg-gray-100">
-                            <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td>
-                            <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td>
-                            <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td>
-                            <td class="py-3 px-6 text-center">
-                                <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
-                                <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">
-                                    <button type="submit" name="delete-event" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" onclick="return confirm('¿Está seguro de que desea eliminar este anuncio?')">Eliminar</button>
-                                </form>
-                            </td>
+                <table class="w-full bg-white shadow-md rounded mb-6 gap-5">
+                    <thead>
+                        <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal ">
+                            <th class="py-3 px-6 text-left">Nombre</th>
+                            <th class="py-3 px-6 text-center">Tema</th>
+                            <th class="py-3 px-6 text-center">Subido por</th>
+                            <th class="py-3 px-6 text-center">Acciones</th>
                         </tr>
-                    <?php endwhile; ?>
-                </tbody>
-            </table>
-            <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/admin/add-new-users"> Crear, agregar nuevos usuarios. </a>
-            <form method="POST" action="/logout">
-                <button type="submit" name="logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded inline-block mt-4">Cerrar sesion</button>
-            </form>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $congregacion = $_SESSION['congregacion'];
+                        $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
+                        while ($events = mysqli_fetch_assoc($result)): ?>
+                            <tr class="border-b border-gray-200 hover:bg-gray-100">
+                                <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td>
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td>
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td>
+                                <td class="py-3 px-6 text-center">
+                                    <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
+                                    <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">
+                                        <button type="submit" name="delete-event" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" onclick="return confirm('¿Está seguro de que desea eliminar este anuncio?')">Eliminar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
+                <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/admin/add-new-users"> Crear, agregar nuevos usuarios. </a>
+                <?php if ($is_admin && $_SESSION['hasRights'] == "0"){
+                    echo "<a class='ml-4 bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white' href='/admin/users-panel'> Administrar usuarios.</a>";
+                } 
+                ?>
+                
+                <form method="POST" action="/logout">
+                    <button type="submit" name="logout" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded inline-block mt-4">Cerrar sesion</button>
+                </form>
 
-        </section>
-        
+            </section>
+        </div>
 
     <!-- Create new user-->
     <?php elseif($is_admin && $_SERVER['REQUEST_URI'] == '/admin/add-new-users'): ?>
-        <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
-        <section class="py-10">
-            <hr class="border-t-3 border-gray-300">
-            <br>
-            <div class="container mx-auto ">
-                <h2 class="text-2xl font-bold mb-4">Agregar usuarios</h2>
-                <p class="mb-4">Desde aqui agregar usuarios.</p>
-            </div>
-            <form method="POST" action="/admin/add-new-users">
-                    <div class="mb-4">
-                        <label for="username" class="block mb-2">Nombre de usuario de la nueva cuenta</label>
-                        <input type="text" id="username" name="newusername" required class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                        <label for="username" class="block mb-2">Contraseña de la nueva cuenta</label>
-                        <input type="text" id="username" name="newpassword" required class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                        <label for="username" class="block mb-2">¿A que congregacion pertenecera la cuenta?</label>
-                        <select class="w-full p-2 border rounded" name="new-account-congregacion" id="congregacion">
-                            <option value="andes"> Los Andes </option>
-                            <option value="liniers"> Liniers </option>
-                        </select>
-                    </div>
-                <button type="submit" name="create-new-user"class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"> Crear nueva cuenta</button>
-            </form>
-        </section>
+        <div class="container mx-auto p-4">
+            <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+            <section class="py-10">
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                <div class="container mx-auto ">
+                    <h2 class="text-2xl font-bold mb-4">Agregar usuarios</h2>
+                    <p class="mb-4">Desde aqui agregar usuarios.</p>
+                </div>
+                <form method="POST" action="/admin/add-new-users">
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">Nombre de usuario de la nueva cuenta</label>
+                            <input type="text" id="username" name="newusername" required class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">Contraseña de la nueva cuenta</label>
+                            <input type="text" id="username" name="newpassword" required class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">¿A que congregacion pertenecera la cuenta?</label>
+                            <select class="w-full p-2 border rounded" name="new-account-congregacion" id="congregacion">
+                                <option value="andes"> Los Andes </option>
+                                <option value="liniers"> Liniers </option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="rights" class="block mb-2">¿Que permisos tiene la cuenta?</label>
+                            <select name="rights" id="rights" class="w-full p-2 border rounded">
+                                <option value="lectura"> Solamente puede ver los anuncios subidos. </option>
+                                <option value="lectura-escritura"> Puede ver y modificar anuncios subidos. </option>
+                                <option value="all"> Puede leer, modificar, agregar y sacar usuarios. </option>
+                            </select>
+                        </div>
+                    <button type="submit" name="create-new-user"class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"> Crear nueva cuenta</button>
+                </form>
+            </section>
+        </div>
 
-    <!-- New users administrator panel -->
-    <?php elseif ($is_admin && $_SERVER['REQUEST_URI'] == '/admin/users-panel'): ?>
-        <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
-        <section class="py-10">
-            <hr class="border-t-3 border-gray-300">
-            <br>
-            <div class="border-t-3 border-gray-300">
-                <h2 class="text-2xl font-bold mb-4">Panel de administrador </h2>
-                <p class="mb-4">Desde aqui puedes ver y editar los usuarios.</p>
-            </div>
-            
-        </section>
+    <!-- Modify User panel -->
+    <?php elseif($is_admin && $_SESSION['hasRights'] == "0" && $_SERVER['REQUEST_URI'] == '/admin/edit-user'): ?>
+        <div class="container mx-auto p-4">
+            <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+            <section class="py-10">
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                <div class="container mx-auto ">
+                    <h2 class="text-2xl font-bold mb-4">Modificar usuario</h2>
+                    <p class="mb-4">Desde aqui puedes modificar usuarios. Si no hace falta modificar algo, solo deja en blanco el espacio.</p>
+
+                    <p class="mb-4">Estas modificando el usuario:  <?php echo $_GET['id']; ?></p>
+
+                </div>
+                <form method="POST" action="/admin/add-new-users">
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">Nuevo nombre de usuario de la nueva cuenta</label>
+                            <input type="text" id="username" name="newusername" required class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">Nueva contraseña de la nueva cuenta</label>
+                            <input type="text" id="username" name="newpassword" required class="w-full p-2 border rounded">
+                        </div>s
+                        <div class="mb-4">
+                            <label for="username" class="block mb-2">¿A que congregacion pertenecera la cuenta?</label>
+                            <select class="w-full p-2 border rounded" name="new-account-congregacion" id="congregacion">
+                                <option value="andes"> Los Andes </option>
+                                <option value="liniers"> Liniers </option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="rights" class="block mb-2">¿Que nuevos permisos tiene la cuenta?</label>
+                            <select name="rights" id="rights" class="w-full p-2 border rounded">
+                                <option value="lectura"> Solamente puede ver los anuncios subidos. </option>
+                                <option value="lectura-escritura"> Puede ver y modificar anuncios subidos. </option>
+                                <option value="all"> Puede leer, modificar, agregar y sacar usuarios. </option>
+                            </select>
+                        </div>
+                    <button type="submit" name="create-new-user"class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"> Crear nueva cuenta</button>
+                </form>
+            </section>
+        </div>
+    <!-- Users administrator panel -->
+    <?php elseif ($is_admin && $_SESSION['hasRights'] == "0" && $_SERVER['REQUEST_URI'] == '/admin/users-panel'): ?>
+        <div class="container mx-auto p-4">
+            <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+            <section class="py-10">
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                <div class="border-t-3 border-gray-300">
+                    <h2 class="text-2xl font-bold mb-4">Panel de administrador </h2>
+                    <p class="mb-4">Desde aqui puedes ver y editar los usuarios.</p>
+                </div>
+                <table class="w-full bg-white shadow-md rounded mb-6 gap-5">
+                    <thead>
+                        <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal ">
+                            <th class="py-3 px-6 text-left">Usuario</th>
+                            <th class="py-3 px-6 text-center">Contraseña</th>
+                            <th class="py-3 px-6 text-center">Congregacion</th>
+                            <th class="py-3 px-6 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Modify -->
+                        <?php
+                        $congregacion = $_SESSION['congregacion'];
+                        $result = mysqli_query($conn, "SELECT * FROM `usuarios` WHERE `congregacion` = '$congregacion' ");
+                        while ($users = mysqli_fetch_assoc($result)): ?>
+                            <tr class="border-b border-gray-200 hover:bg-gray-100">
+                                <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($users['name']); ?></td>
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($users['passwd']); ?></td>
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($users['congregacion']); ?></td>
+                                <td class="py-3 px-6 text-center">
+                                    <a href="/admin/edit-user?id=<?php echo $users['name']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
+                                    <form method="POST" action="/admin/delete-user?id=<?php echo $users['name']; ?>" class="inline-block">
+                                        <button type="submit" name="delete-user" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" onclick="return confirm('¿Está seguro de que desea eliminar este anuncio?')">Eliminar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endwhile; ?>
+                        <!-- Modify -->
+                    </tbody>
+                </table>
+            </section>
+        </div>
     <!-- Edit event form -->
-    <?php elseif($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')): ?>
-        <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
-        <section class="py-10">
-            <hr class="border-t-3 border-gray-300">
-            <br>
-            <div class="container mx-auto">
-                <h2 class="text-2xl font-bold mb-4">Editar anuncio</h2>
-                <p class="mb-4"> Desde aqui puedes editar un anuncio. Si no hace falta editar algun campo dejalo en blanco.</p>
-            </div>
-            <?php 
-                $congregacion = $_SESSION['congregacion'];
-                $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
-                $events = mysqli_fetch_assoc($result);
-            ?>
-            <div class="container mx-auto">
-                <p class="mb-4"> <b> Estas modificando el anuncio: <?php echo $_GET['id']; ?> </b> </p>
-            </div>
-            <form method="POST" action="/admin/edit-event?id=<?php echo $events['nombre']; ?>" enctype="multipart/form-data">
-                <div class="mb-4">
-                        <label for="name" class="block mb-2"> Nuevo nombre del anuncio</label>
-                        <input type="text" id="name" name="new-name" class="w-full p-2 border rounded">
-                </div>
-                <div class="mb-4">
-                    <label for="name" class="block mb-2"> Nuevo tema del anuncio</label>
-                    <select name="new-tema" id="tema">
-                        <option value="salidas">Salidas de predicación</option>
-                        <option value="acomodadores_microfonistas">Acomodadores y microfonistas</option>
-                        <option value="audio_video_plataforma">Audio, video y plataforma</option>
-                        <option value="grupos">Grupos para el servicio</option>
-                        <option value="reuniones_entre_semana">Reunión de entre semana (Especificar fecha)</option>
-                        <option value="reuniones_fin_semana">Reunión de fin de semana</option>
-                    </select>
-                </div>
-                <div class="mb-4">
-                        <label for="date" class="block mb-2">Nueva fecha del programa de reunión (Formato: Año/Mes/Día)</label>
-                        <input type="text" id="date" name="new-eventdate" class="w-full p-2 border rounded">
-                </div>
-                <div class="mb-4">
-                    <label for="image" class="block mb-2"> Nueva imagen (PNG o JPG)</label>
-                    <input type="file" id="image" name="new-eventimage" class="w-full p-2 border rounded">
-                </div>
-                <div class="mb-4">
-                        <label for="cong" class="block mb-2">Nuevo color del cuadro del anuncio</label>
-                        <input type="color" name="new-color" id="color" class="p-2 border rounded">
-                </div>
-                <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
-            </form>
-        </section>
 
-    <!-- New Event Form -->
-    <?php elseif ($is_admin && $_SERVER['REQUEST_URI'] == '/admin/new-event'): ?>
-        <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
-        <section class="py-12">
-            <hr class="border-t-3 border-gray-300">
-            <br>
-            <div class="container mx-auto ">
-                <h2 class="text-2xl font-bold mb-4">Agregar anuncio</h2>
-                <form method="POST" action="/admin/new-event" enctype="multipart/form-data">
+    <?php elseif($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')): ?>
+        <div class="container mx-auto p-4">
+            <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+            <section class="py-10">
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                <div class="container mx-auto">
+                    <h2 class="text-2xl font-bold mb-4">Editar anuncio</h2>
+                    <p class="mb-4"> Desde aqui puedes editar un anuncio. Si no hace falta editar algun campo dejalo en blanco.</p>
+                </div>
+                <?php 
+                    $congregacion = $_SESSION['congregacion'];
+                    $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
+                    $events = mysqli_fetch_assoc($result);
+                ?>
+                <div class="container mx-auto">
+                    <p class="mb-4"> <b> Estas modificando el anuncio: <?php echo $_GET['id']; ?> </b> </p>
+                </div>
+                <form method="POST" action="/admin/edit-event?id=<?php echo $events['nombre']; ?>" enctype="multipart/form-data">
                     <div class="mb-4">
-                        <label for="name" class="block mb-2">Nombre del anuncio</label>
-                        <input type="text" id="name" name="eventname" required class="w-full p-2 border rounded">
+                            <label for="name" class="block mb-2"> Nuevo nombre del anuncio</label>
+                            <input type="text" id="name" name="new-name" class="w-full p-2 border rounded">
                     </div>
                     <div class="mb-4">
-                        <label for="tema" class="block mb-2">Tema del anuncio</label>
-                        <select class="w-full p-2 border rounded" name="tema" id="tema">
+                        <label for="name" class="block mb-2"> Nuevo tema del anuncio</label>
+                        <select name="new-tema" id="tema">
                             <option value="salidas">Salidas de predicación</option>
                             <option value="acomodadores_microfonistas">Acomodadores y microfonistas</option>
                             <option value="audio_video_plataforma">Audio, video y plataforma</option>
@@ -421,46 +504,104 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                         </select>
                     </div>
                     <div class="mb-4">
-                        <label for="date" class="block mb-2">Fecha del programa de reunión (Formato: Año/Mes/Día)</label>
-                        <input type="text" id="date" name="eventdate" class="w-full p-2 border rounded">
+                            <label for="date" class="block mb-2">Nueva fecha del programa de reunión (Formato: Año/Mes/Día)</label>
+                            <input type="text" id="date" name="new-eventdate" class="w-full p-2 border rounded">
                     </div>
                     <div class="mb-4">
-                        <label for="image" class="block mb-2">Imagen (PNG o JPG)</label>
-                        <input type="file" id="image" name="eventimage" class="w-full p-2 border rounded">
+                        <label for="image" class="block mb-2"> Nueva imagen (PNG o JPG)</label>
+                        <input type="file" id="image" name="new-eventimage" class="w-full p-2 border rounded">
                     </div>
                     <div class="mb-4">
-                        <label for="cong" class="block mb-2">Color del cuadro del anuncio</label>
-                        <input type="color" name="color" id="color" class="p-2 border rounded">
+                            <label for="cong" class="block mb-2">Nuevo color del cuadro del anuncio</label>
+                            <input type="color" name="new-color" id="color" class="p-2 border rounded">
                     </div>
-                    <button type="submit" name="create-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Añadir anuncio</button>
+                    <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
                 </form>
-            </div>
-        </section>
-
+            </section>
+        </div>
+    <!-- New Event Form -->
+    <?php elseif ($is_admin && $_SERVER['REQUEST_URI'] == '/admin/new-event'): ?>
+        <div class="container mx-auto p-4">
+            <a href="/admin" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Volver a la pagina anterior</a>
+            <section class="py-12">
+                <hr class="border-t-3 border-gray-300">
+                <br>
+                <div class="container mx-auto ">
+                    <h2 class="text-2xl font-bold mb-4">Agregar anuncio</h2>
+                    <form method="POST" action="/admin/new-event" enctype="multipart/form-data">
+                        <div class="mb-4">
+                            <label for="name" class="block mb-2">Nombre del anuncio</label>
+                            <input type="text" id="name" name="eventname" required class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="tema" class="block mb-2">Tema del anuncio</label>
+                            <select class="w-full p-2 border rounded" name="tema" id="tema">
+                                <option value="salidas">Salidas de predicación</option>
+                                <option value="acomodadores_microfonistas">Acomodadores y microfonistas</option>
+                                <option value="audio_video_plataforma">Audio, video y plataforma</option>
+                                <option value="grupos">Grupos para el servicio</option>
+                                <option value="reuniones_entre_semana">Reunión de entre semana (Especificar fecha)</option>
+                                <option value="reuniones_fin_semana">Reunión de fin de semana</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="date" class="block mb-2">Fecha del programa de reunión (Formato: Año/Mes/Día)</label>
+                            <input type="text" id="date" name="eventdate" class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="image" class="block mb-2">Imagen (PNG o JPG)</label>
+                            <input type="file" id="image" name="eventimage" class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4">
+                            <label for="cong" class="block mb-2">Color del cuadro del anuncio</label>
+                            <input type="color" name="color" id="color" class="p-2 border rounded">
+                        </div>
+                        <button type="submit" name="create-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Añadir anuncio</button>
+                    </form>
+                </div>
+            </section>
+        </div>
     <!-- Select Congregation -->
     <?php elseif (!$cong): ?>
-        <h2 class="text-2xl font-semibold text-center">Selecciona una congregación</h2>
-        <form action="index.php" class="flex flex-col items-center mt-4">
-            <select name="congregacion" id="congregacion-select" class="border rounded p-2 mb-4">
-                <option value="andes">Los Andes</option>
-                <option value="liniers">Liniers</option>
-            </select>
-            <button class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600" type="submit">Entrar a la cartelera</button>
-            <?php if (!$is_admin): ?>
-                <a class="bg-green-500 text-white py-2 px-4 rounded mt-4 hover:bg-green-600" href="/login">Ingresar</a>
-            <?php endif; ?>
-        </form>
+        <div class="relative min-h-screen bg-cover bg-center" style="background-image: url('fondo_reuniones.jpg');">
+            <!-- Filtro oscuro para que el contenido sea legible (opcional) -->
+            <div class="absolute inset-0 bg-black bg-opacity-50"></div>
 
-    <!-- Display Events -->
+            <div class="container mx-auto p-4 relative z-10">
+                <h1 class="text-5xl font-bold text-center text-white mb-8">Cartelera Digital</h1>
+                
+                <!-- Contenedor con fondo blanco y opacidad media -->
+                <div class="bg-white bg-opacity-80 p-8 rounded-lg shadow-lg max-w-md mx-auto">
+                    <h2 class="text-2xl font-semibold text-center text-black mb-4">Selecciona una congregación</h2>
+                    
+                    <form action="index.php" class="flex flex-col items-center mt-4">
+                        <select name="congregacion" id="congregacion-select" class="border rounded p-2 mb-4 w-full">
+                            <option value="andes">Los Andes</option>
+                            <option value="liniers">Liniers</option>
+                        </select>
+                        <button class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 w-full" type="submit">Entrar a la cartelera</button>
+                        
+                        <?php if (!$is_admin): ?>
+                            <a class="bg-green-500 text-white py-2 px-4 rounded mt-4 hover:bg-green-600 w-full text-center" href="/login">Iniciar sesión</a>
+                        <?php endif; ?>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+   <!-- Display Events -->
     <?php elseif ($cong): ?>
-        <a href="/" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Regresar</a>
-        <h1 class="text-3xl font-bold text-center mb-4 pt-4">
-                Cartelera de la congregación <?php echo ($_SESSION['congregacion'] == "andes") ? "Los Andes" : "Liniers"; ?>
-            </h1>
+        <div class="justify-center w-full p-8">
+            <a href="/" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Regresar</a>
+            <h1 class="text-3xl font-bold text-center mb-4 pt-4">
+                    Cartelera de la congregación <?php echo ($_SESSION['congregacion'] == "andes") ? "Los Andes" : "Liniers"; ?>
+                </h1>
             <hr class="border-t-4 border-gray-300">
+
             <main class="py-12">
-                <div class="container mx-auto px-3">
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4"> <!-- Reduce el gap a 2 o 1 -->
+                <!-- Div con estilo en línea para anular las clases container y mx-auto -->
+                <div class="px-3" style="max-width: none !important; margin: 0 !important;">
+                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                         <?php $events = getEventsEx($_SESSION['congregacion'], $sqltable); ?>
                         <?php foreach ($events as $event): ?>
                             <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-80">
@@ -476,12 +617,15 @@ function createNewUser($newuser, $newpass, $newaccountcong){
                     </div>
                 </div>
             </main>
+        </div>
     <?php endif; ?>
+        
     <!-- Pop up for image-->
     <div class="popup-image fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 hidden">
         <span class="close-popup absolute top-5 right-6 text-white text-4xl cursor-pointer">&times;</span>
         <img src="" alt="Imagen del Popup" class="popup-img" style="max-width: 99%; max-height: 99%; width: auto; height: auto;" />
     </div>
+    
     <!-- Scripting for image popup-->
     <script>
     let timeoutId;
@@ -517,6 +661,6 @@ function createNewUser($newuser, $newpass, $newaccountcong){
     </script>
 
    
-</div>
+
 </body>
 </html>

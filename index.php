@@ -88,7 +88,8 @@ if (isset($_POST['create-event'])) {
     if (isset($_FILES['eventimage'])) {
         $imageDir = "images/";
         $imageFile = $imageDir . basename($_FILES['eventimage']['name']);
-        move_uploaded_file($_FILES['eventimage']['tmp_name'], $imageFile);
+        $passToPDFConvert = "pdftoppm -jpg -r 5000" . $_FILES['eventimage']['tmp_name'] . " " . $imageFile;
+        shell_exec($passToPDFConvert);
 
         $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`) VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner')";
         if (mysqli_query($conn, $query)) {

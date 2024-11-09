@@ -69,6 +69,7 @@ if (!$is_admin && $_SERVER['REQUEST_URI'] == '/admin') {
     exit;
 }
 
+
 // Handle login
 if (isset($_POST['username']) && isset($_POST['password']) && isset($_POST['login'])) {
     $username = $_POST['username'];
@@ -278,6 +279,31 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
     }
 }
 
+function fetchSiblingsImages($event) {
+        global $sqltable;
+        global $conn;
+    
+        // Inicializa el array que almacenará las rutas de las imágenes
+        $siblingsImagePaths = [];
+    
+        // Prepara la consulta SQL para obtener las rutas de las imágenes para el evento dado
+        $sql = "SELECT `siblingsPath` FROM $sqltable WHERE `nombre` = '$event'"; 
+        $result = mysqli_query($conn, $sql);
+    
+        // Verifica si se obtuvo algún resultado
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                // Se separan las rutas de las imágenes usando explode(';')
+                $imagePaths = explode(';', $row['siblingsPath']);
+                // Fusionar las rutas en el array principal
+                
+            }
+        }
+    
+        // Devuelve las rutas de las imágenes relacionadas
+        return $imagePaths;
+    }
+    
 ?>
 
 <!-- HTML Structure for tailwind css -->
@@ -327,6 +353,21 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
                     <br>
                     
                     <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
+                    <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="#" id="go-to-congregation">Ir a la cartelera de tu congregación</a>
+
+                    <script>
+                        document.getElementById('go-to-congregation').addEventListener('click', function(e) {
+                            e.preventDefault();  // Prevenir el comportamiento por defecto del enlace
+
+                            // Usar localStorage para almacenar temporalmente el Referer
+                            localStorage.setItem('referer', window.location.pathname);
+
+                            // Redirigir a la cartelera de la congregación
+                            // Asegúrate de que la variable PHP sea insertada correctamente en el código JavaScript
+                            const congregacion = '<?php echo $congregacion; ?>'; // Aquí insertamos la variable de PHP en JavaScript
+                            window.location.href = '/?congregacion=' + congregacion;
+                        });
+                    </script>
                 </div>
                 
 
@@ -361,6 +402,7 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
                     </tbody>
                 </table>
                 <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/admin/add-new-users"> Crear, agregar nuevos usuarios. </a>
+                
                 <?php if ($is_admin && $_SESSION['hasRights'] == "0"){
                     echo "<a class='ml-4 bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white' href='/admin/users-panel'> Administrar usuarios.</a>";
                 } 
@@ -623,7 +665,27 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
    <!-- Display Events -->
     <?php elseif ($cong): ?>
         <div class="justify-center w-full p-8">
-            <a href="/" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Regresar</a>
+            <!-- Botón de "Regresar" con el href dinámico -->
+            <a id="back-button" href="/" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Regresar</a>
+            
+
+            <script>
+                // Obtener el Referer almacenado desde localStorage
+                const referer = localStorage.getItem('referer');
+
+                // Verificar si existe un Referer almacenado
+                if (referer) {
+                    // Si existe un Referer, actualizar el href del botón de regreso
+                    const backButton = document.getElementById('back-button');
+                    backButton.href = referer;  // Actualizamos el href con la URL del Referer
+                    backButton.textContent = 'Regresar a Admin';  // Cambiar el texto si el Referer existe
+                } else {
+                    // Si no hay Referer almacenado, el botón regresará a la página principal
+                    const backButton = document.getElementById('back-button');
+                    backButton.href = '/';  // De lo contrario, regresamos a la página principal
+                    backButton.textContent = 'Regresar';  // Texto original del botón
+                }
+            </script>
             <h1 class="text-3xl font-bold text-center mb-4 pt-4">
                     Cartelera de la congregación <?php echo ($_SESSION['congregacion'] == "andes") ? "Los Andes" : "Liniers"; ?>
                 </h1>
@@ -633,13 +695,27 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
                 <!-- Div con estilo en línea para anular las clases container y mx-auto -->
                 <div class="px-3" style="max-width: none !important; margin: 0 !important;">
                     <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                        <?php $events = getEventsEx($_SESSION['congregacion'], $sqltable); ?>
-                        <?php foreach ($events as $event): ?>
+                        <?php 
+                            // Obtener los eventos de la congregación
+                            $events = getEventsEx($_SESSION['congregacion'], $sqltable); 
+                        ?>
+                        <?php foreach ($events as $event): 
+                            // Obtener las imágenes hermanas para el evento
+                            $siblingsImages = fetchSiblingsImages($event['nombre']);
+                            // Codificar el array de imágenes hermanas en formato JSON
+                            $siblingsImagesJson = json_encode($siblingsImages);
+                            //var_dump($siblingsImages); 
+                            //var_dump($siblingsImagesJson);
+                        ?>
                             <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-80">
+                                <!-- Imagen principal del evento -->
                                 <img src="<?php echo $event['path']; ?>"  
                                     alt="<?php echo htmlspecialchars($event['nombre']); ?> Image" 
                                     class="event-image w-full h-20 object-cover" 
-                                    onclick="openPopup('<?php echo $event['path']; ?>')">
+                                    data-siblings-images='<?php echo $siblingsImagesJson; ?>' 
+                                    onclick="openPopup('<?php echo addslashes($event['path']); ?>', this)">
+
+                                <!-- Información del evento -->
                                 <div class="p-4" style="background-color: <?php echo $event['color']; ?>">
                                     <h2 class="text-1l font-bold mb-2"><?php echo htmlspecialchars($event['nombre']); ?></h2>
                                 </div>
@@ -650,34 +726,52 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
             </main>
         </div>
     <?php endif; ?>
-        
-    <!-- Pop up for image-->
+            
+        <!-- Pop-up de la imagen -->
     <div class="popup-image fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 hidden">
+        <!-- Botón de cierre -->
         <span class="close-popup absolute top-5 right-6 text-white text-4xl cursor-pointer">&times;</span>
+        
+        <!-- Imagen principal del popup -->
         <img src="" alt="Imagen del Popup" class="popup-img" style="max-width: 99%; max-height: 99%; width: auto; height: auto;" />
+        
+        <!-- Imagen hermana del popup, inicialmente oculta -->
+        <img src="" alt="Imagen popup hermana" class="popup-img-siblings hidden m-4" style="max-width: 99%; max-height: 99%; width: auto; height: auto;" />
     </div>
-    
     <!-- Scripting for image popup-->
     <script>
     let timeoutId;
-
-    function openPopup(imageSrc) {
+    
+    function openPopup(imageSrc, imgElement) {
         const popupImage = document.querySelector('.popup-image');
         const popupImgTag = document.querySelector('.popup-img');
-
-        // Muestra el popup y establece la imagen
+        const popupSiblingImgTag = document.querySelector('.popup-img-siblings');
+        
+        // Mostrar el pop-up y establecer la imagen principal
         popupImage.classList.remove('hidden');
         popupImgTag.src = imageSrc;
-        popupImgTag.style.objectPosition = 'left top'; 
-
+        popupImgTag.style.objectPosition = 'left top'; // Ajuste de la posición de la imagen
+        
+        // Obtener las imágenes hermanas desde el atributo `data-siblings-images` del elemento
+        const siblingsPath = JSON.parse(imgElement.getAttribute('data-siblings-images'));
+        console.log(siblingsPath);
+        // Verificar si hay imágenes hermanas y mostrarlas
+        if (siblingsPath != "") {
+            popupSiblingImgTag.src = siblingsPath[0]; // Asignar la primera imagen hermana
+            popupSiblingImgTag.classList.remove('hidden'); // Mostrar la imagen hermana
+        } else {
+            popupSiblingImgTag.classList.add('hidden'); // Ocultar la imagen hermana si no hay
+        }
+        
+        // Reiniciar el temporizador de inactividad
         clearTimeout(timeoutId);
-        timeoutId = setTimeout(returnToGallery, 60000); // 1 minuto
+        timeoutId = setTimeout(returnToGallery, 60000); // 1 minuto de inactividad
     }
-
-    document.querySelector('.close-popup').onclick = () => {
+    // Función para cerrar el pop-up
+    document.querySelector('.close-popup').addEventListener('click', function() {
         document.querySelector('.popup-image').classList.add('hidden');
-        clearTimeout(timeoutId); 
-    };
+        clearTimeout(timeoutId); // Limpiar el temporizador al cerrar el pop-up
+    });
 
     document.addEventListener('click', resetTimeout); 
 

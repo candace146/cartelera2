@@ -1,2 +1,13 @@
-images/andes/
-images/liniers/
+# Ignorar todo el contenido dentro de la carpeta images/andes/
+images/andes/*
+
+# Ignorar todo el contenido dentro de la carpeta images/liniers/
+images/liniers/*
+
+# No ignorar la carpeta images/andes ni la de images/liniers
+!images/andes/
+!images/liniers/
+
+# No ignorar los archivos ocultos dentro de esas carpetas
+images/andes/.* 
+images/liniers/.

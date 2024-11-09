@@ -84,14 +84,45 @@ if (isset($_POST['create-event'])) {
     $color = $_POST['color'];
     $owner = $_SESSION['username'];
     $congregacion = $_SESSION['congregacion'];
-
+    
     if (isset($_FILES['eventimage'])) {
-        $imageDir = "images/";
-        $imageFile = $imageDir . basename($_FILES['eventimage']['name']);
-        $passToPDFConvert = "pdftoppm -jpg -r 5000" . $_FILES['eventimage']['tmp_name'] . " " . $imageFile;
+        $imageFolder = "images/" . $congregacion . "/";
+        $imageFile = $imageFolder . basename($_FILES['eventimage']['name']); // Name por .pdf
+        
+        // Subir el archivo PDF
+        move_uploaded_file($_FILES["eventimage"]["tmp_name"], $imageFile);
+        
+        // Eliminar la extensión .pdf para generar los archivos PNG
+        $imageFileInfo = pathinfo($imageFile);
+        $imageFileWithoutPDF = $imageFileInfo['dirname'] . "/" . $imageFileInfo['filename'];
+        
+        // Comando para convertir PDF a PNG
+        $passToPDFConvert = "pdftoppm -r 500 -png " . $imageFile . " " . $imageFileWithoutPDF;
+        
+        // Ejecutar la conversión
         shell_exec($passToPDFConvert);
-
-        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`) VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner')";
+        
+        // Buscar todos los archivos PNG generados
+        $pattern = $imageFileInfo['filename'] . "-*.png"; // Usamos -N para buscar todos los PNGs generados
+        $directory = $imageFolder . $pattern;
+        $siblings = glob($directory);
+        
+        if (count($siblings) > 0) {
+            // Si hay múltiples imágenes generadas, tomamos la primera (o la que desees)
+            $imageFile = $siblings[0]; // Primera imagen PNG generada
+            $siblingsCount = count($siblings); // Contamos cuántos archivos PNG se generaron
+            
+            // Si necesitas la ruta del primer archivo PNG
+            $siblingsPath = $imageFile;  // Usamos la ruta del primer archivo generado
+        } else {
+            echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: No se generaron imágenes.</div>";
+            exit;  // Terminamos el script si no se generaron imágenes
+        }
+        
+        // Insertar en la base de datos
+        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`) 
+                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '1', '$siblingsCount', '$siblingsPath')";
+        
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
         } else {
@@ -101,7 +132,6 @@ if (isset($_POST['create-event'])) {
         echo "No se ha subido ninguna imagen.";
     }
 }
-
 
 
 // Handle edit event
@@ -564,7 +594,7 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
         </div>
     <!-- Select Congregation -->
     <?php elseif (!$cong): ?>
-        <div class="relative min-h-screen bg-cover bg-center" style="background-image: url('fondo_reuniones.jpg');">
+        <div class="relative min-h-screen bg-cover bg-center" style="background-image: url('fondo.jpg');">
             <!-- Filtro oscuro para que el contenido sea legible (opcional) -->
             <div class="absolute inset-0 bg-black bg-opacity-50"></div>
 

@@ -25,5 +25,6 @@
 
 | **Versión (Número)** | **Funcionalidades**                                 |
 |----------------------|-----------------------------------------------------|
+| **Scylla (v1.1.1)**  | Capacidad para poder manipular PDF y mostrar hasta 2 Imagenes por PopUp |
 | **Scylla (v1.1.0)**   | Subir, editar, borrar y mostrar dinámicamente fotos. |
 | **Scylla (v1.0.0)**   | Gestión de anuncios con soporte para imágenes.     |

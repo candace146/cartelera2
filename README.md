@@ -19,3 +19,11 @@
 - **JavaScript**: Lógica del frontend, encargada de las interacciones dinámicas como los popups, la visualización de imágenes y la carga dinámica de contenido.
 - **HTML**: Estructura básica de la página web.
 - **CSS (Tailwind CSS)**: Framework de diseño para proporcionar una interfaz de usuario limpia y moderna con clases utilitarias, lo que facilita un desarrollo rápido y flexible.
+
+
+## Versiones y Funcionalidades
+
+| **Versión (Número)** | **Funcionalidades**                                 |
+|----------------------|-----------------------------------------------------|
+| **Scylla (v1.1.0)**   | Subir, editar, borrar y mostrar dinámicamente fotos. |
+| **Scylla (v1.0.0)**   | Gestión de anuncios con soporte para imágenes.     |

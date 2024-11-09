@@ -109,11 +109,8 @@ if (isset($_POST['create-event'])) {
         $siblings = glob($directory);
         
         if (count($siblings) > 0) {
-            // Si hay múltiples imágenes generadas, tomamos la primera (o la que desees)
-            $imageFile = $siblings[0]; // Primera imagen PNG generada
+            $imageFile = $siblings[1]; // Segunda imagen PNG generada, ya que la primera siempre va a ser la misma que si no tuviera pagina
             $siblingsCount = count($siblings); // Contamos cuántos archivos PNG se generaron
-            
-            // Si necesitas la ruta del primer archivo PNG
             $siblingsPath = $imageFile;  // Usamos la ruta del primer archivo generado
         } else {
             echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: No se generaron imágenes.</div>";
@@ -282,10 +279,6 @@ function createNewUser($newuser, $newpass, $newaccountcong, $rights){
 function fetchSiblingsImages($event) {
         global $sqltable;
         global $conn;
-    
-        // Inicializa el array que almacenará las rutas de las imágenes
-        $siblingsImagePaths = [];
-    
         // Prepara la consulta SQL para obtener las rutas de las imágenes para el evento dado
         $sql = "SELECT `siblingsPath` FROM $sqltable WHERE `nombre` = '$event'"; 
         $result = mysqli_query($conn, $sql);
@@ -295,11 +288,8 @@ function fetchSiblingsImages($event) {
             while ($row = mysqli_fetch_assoc($result)) {
                 // Se separan las rutas de las imágenes usando explode(';')
                 $imagePaths = explode(';', $row['siblingsPath']);
-                // Fusionar las rutas en el array principal
-                
             }
         }
-    
         // Devuelve las rutas de las imágenes relacionadas
         return $imagePaths;
     }
@@ -353,7 +343,7 @@ function fetchSiblingsImages($event) {
                     <br>
                     
                     <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
-                    <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="#" id="go-to-congregation">Ir a la cartelera de tu congregación</a>
+                    <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="#" id="go-to-congregation">Ir a la cartelera de tu congregación</a> <!-- Preview de la cartelera-->
 
                     <script>
                         document.getElementById('go-to-congregation').addEventListener('click', function(e) {
@@ -363,9 +353,8 @@ function fetchSiblingsImages($event) {
                             localStorage.setItem('referer', window.location.pathname);
 
                             // Redirigir a la cartelera de la congregación
-                            // Asegúrate de que la variable PHP sea insertada correctamente en el código JavaScript
-                            const congregacion = '<?php echo $congregacion; ?>'; // Aquí insertamos la variable de PHP en JavaScript
-                            window.location.href = '/?congregacion=' + congregacion;
+                            const congregacion = '<?php echo $congregacion; ?>'; // Esto permite variar de cartelera dependiendo del usuario.
+                            window.location.href = '/?congregacion=' + congregacion; // Esto genera la URL a la que se va a acceder.
                         });
                     </script>
                 </div>
@@ -388,9 +377,9 @@ function fetchSiblingsImages($event) {
                         $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
                         while ($events = mysqli_fetch_assoc($result)): ?>
                             <tr class="border-b border-gray-200 hover:bg-gray-100">
-                                <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td>
-                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td>
-                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td>
+                                <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td> <!-- Columna de nombre -->
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td> <!-- Tema -->
+                                <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td> <!-- Quien la subio -->
                                 <td class="py-3 px-6 text-center">
                                     <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
                                     <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">

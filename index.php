@@ -92,34 +92,23 @@ if (isset($_POST['create-event'])) {
         
         // Subir el archivo PDF
         move_uploaded_file($_FILES["eventimage"]["tmp_name"], $imageFile);
-        
-        // Eliminar la extensión .pdf para generar los archivos PNG
-        $imageFileInfo = pathinfo($imageFile);
-        $imageFileWithoutPDF = $imageFileInfo['dirname'] . "/" . $imageFileInfo['filename'];
-        
-        // Comando para convertir PDF a PNG
-        $passToPDFConvert = "pdftoppm -r 500 -png " . $imageFile . " " . $imageFileWithoutPDF;
-        
-        // Ejecutar la conversión
-        shell_exec($passToPDFConvert);
-        
-        // Buscar todos los archivos PNG generados
-        $pattern = $imageFileInfo['filename'] . "-*.png"; // Usamos -N para buscar todos los PNGs generados
-        $directory = $imageFolder . $pattern;
-        $siblings = glob($directory);
-        
-        if (count($siblings) > 0) {
-            $imageFile = $siblings[1]; // Segunda imagen PNG generada, ya que la primera siempre va a ser la misma que si no tuviera pagina
-            $siblingsCount = count($siblings); // Contamos cuántos archivos PNG se generaron
-            $siblingsPath = $imageFile;  // Usamos la ruta del primer archivo generado
+        if (str_contains($_FILES['eventimage']['type'], "pdf")){
+            $pdfinfo = convertToPdf($imageFile, $imageFolder);
+            $imageFile = $pdfinfo["imageFile"];
+            $siblingsCount = $pdfinfo["siblingsCount"];
+            $siblingsPath = $pdfinfo["siblingsPath"];
+            $hasSiblings = $pdfinfo["hasSiblings"];
         } else {
-            echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: No se generaron imágenes.</div>";
-            exit;  // Terminamos el script si no se generaron imágenes
+            $imageFile = $imageFile;
+            $siblingsCount = "0";
+            $siblingsPath = "0";
+            $hasSiblings = "0";
         }
+        
         
         // Insertar en la base de datos
         $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`) 
-                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '1', '$siblingsCount', '$siblingsPath')";
+                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '$hasSiblings', '$siblingsCount', '$siblingsPath')";
         
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
@@ -223,6 +212,41 @@ if (isset($_POST['logout'])) {
 
 // Functions
 
+
+function convertToPdf($imageFile, $imageFolder) {
+    // Eliminar la extensión .pdf para generar los archivos PNG
+    $imageFileInfo = pathinfo($imageFile);
+    $imageFileWithoutPDF = $imageFileInfo['dirname'] . "/" . $imageFileInfo['filename'];
+    
+    // Comando para convertir PDF a PNG
+    $passToPDFConvert = "pdftoppm -r 500 -png " . escapeshellarg($imageFile) . " " . escapeshellarg($imageFileWithoutPDF);
+    
+    // Ejecutar la conversión
+    shell_exec($passToPDFConvert);
+    
+    // Buscar todos los archivos PNG generados
+    $pattern = $imageFileInfo['filename'] . "-*.png"; // Usamos -N para buscar todos los PNGs generados
+    $directory = $imageFolder . $pattern;
+    $siblings = glob($directory);
+    
+    if (count($siblings) > 0) {
+        $hasSiblings = "1"; // Segunda imagen PNG generada, ya que la primera siempre es la misma
+        $siblingsCount = count($siblings); // Contamos cuántos archivos PNG se generaron
+        $siblingsPath = $siblings[1];  // Usamos la ruta del SEGUNDO archivo generado, es la que se mostrara a la derecha al tocar en una imagen que tenga siblings
+
+        // Retornar los valores necesarios
+        $imageFile = $imageFileInfo['dirname']. '/' . $imageFileInfo['filename'] . '-1.png';
+        return [
+            'hasSiblings' => $hasSiblings,
+            'imageFile' => $imageFile,
+            'siblingsCount' => $siblingsCount,
+            'siblingsPath' => $siblingsPath
+        ];
+    } else {
+        echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Error: No se generaron imágenes.</div>";
+        exit;  // Terminamos el script si no se generaron imágenes
+    }
+}
 // Create admin user if init is true
 function createAdminUser($conn, $default_credentials) {
     $sqlquery = "INSERT INTO usuarios (name, passwd, rights) VALUES ('$default_credentials[username]', '$default_credentials[password]', 'admin')";
@@ -335,7 +359,7 @@ function fetchSiblingsImages($event) {
     <!-- Admin Panel -->
     <?php elseif ( $is_admin && $_SERVER['REQUEST_URI'] == '/admin'): ?>
         <div class="container mx-auto p-4">
-            <section class="py-12">
+            <section class="py-12 ">
                 <div class="container mx-auto ">
                     <h2 class="text-2xl font-bold mb-4">Bienvenido <?php $username = $_SESSION['username']; echo $username; ?> al panel de administracion.</h2>
                     <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
@@ -362,13 +386,13 @@ function fetchSiblingsImages($event) {
 
                 <div class="mb-4"></div> <!-- Espaciador -->
 
-                <table class="w-full bg-white shadow-md rounded mb-6 gap-5">
+                <table class="w-full bg-white shadow-md rounded-tl-lg rounded-tr-lg rounded-bl-lg rounded-br-lg mb-6">
                     <thead>
-                        <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal ">
-                            <th class="py-3 px-6 text-left">Nombre</th>
+                        <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
+                            <th class="py-3 px-6 text-left rounded-tl-lg">Nombre</th>
                             <th class="py-3 px-6 text-center">Tema</th>
                             <th class="py-3 px-6 text-center">Subido por</th>
-                            <th class="py-3 px-6 text-center">Acciones</th>
+                            <th class="py-3 px-6 text-center rounded-tr-lg">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -380,7 +404,7 @@ function fetchSiblingsImages($event) {
                                 <td class="py-4 px-6 text-left whitespace-nowrap"><?php echo htmlspecialchars($events['nombre']); ?></td> <!-- Columna de nombre -->
                                 <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td> <!-- Tema -->
                                 <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td> <!-- Quien la subio -->
-                                <td class="py-3 px-6 text-center">
+                                <td class="py-3 px-6 text-center rounded-br-lg">
                                     <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
                                     <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">
                                         <button type="submit" name="delete-event" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" onclick="return confirm('¿Está seguro de que desea eliminar este anuncio?')">Eliminar</button>
@@ -693,7 +717,7 @@ function fetchSiblingsImages($event) {
                             $siblingsImages = fetchSiblingsImages($event['nombre']);
                             // Codificar el array de imágenes hermanas en formato JSON
                             $siblingsImagesJson = json_encode($siblingsImages);
-                            //var_dump($siblingsImages); 
+                            var_dump($siblingsImages); 
                             //var_dump($siblingsImagesJson);
                         ?>
                             <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-80">

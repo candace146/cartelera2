@@ -79,13 +79,14 @@ if (isset($_POST['username']) && isset($_POST['password']) && isset($_POST['logi
 
 // Handle new event creation
 if (isset($_POST['create-event'])) {
-    $name = $_POST['eventname'];
+    $raw_name = $_POST['eventname'];
+    $name = str_replace(' ', '_', $raw_name);
     $tema = $_POST['tema'];
     $date = $_POST['eventdate'] ?? '';
     $color = $_POST['color'];
     $owner = $_SESSION['username'];
     $congregacion = $_SESSION['congregacion'];
-    
+    $randomId = 
     if (isset($_FILES['eventimage'])) {
         $imageFolder = "images/" . $congregacion . "/";
         $imageFile = $imageFolder . basename($_FILES['eventimage']['name']); // Name por .pdf
@@ -101,14 +102,14 @@ if (isset($_POST['create-event'])) {
         } else {
             $imageFile = $imageFile;
             $siblingsCount = "0";
-            $siblingsPath = "0";
+            $siblingsPath = "";
             $hasSiblings = "0";
         }
         
         
         // Insertar en la base de datos
-        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`) 
-                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '$hasSiblings', '$siblingsCount', '$siblingsPath')";
+        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`, `id`) 
+                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '$hasSiblings', '$siblingsCount', '$siblingsPath', '$randomId')";
         
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
@@ -127,34 +128,43 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
         header("Location: /admin");
         exit;
     }
+    
     $id = $_GET['id'];
     $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'"));
-
+    var_dump($previousEventDetails);
+    echo $id;
     if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit-event'])) {
         $nuevoNombre = !empty($_POST['new-name']) ? $_POST['new-name'] : $previousEventDetails['nombre'];
         $nuevaFecha = !empty($_POST['new-eventdate']) ? $_POST['new-eventdate'] : $previousEventDetails['fecha'];
         $nuevoTema = !empty($_POST['new-tema']) ? $_POST['new-tema'] : $previousEventDetails['tema'];
         $newColor = !empty($_POST['new-color']) ? $_POST['new-color'] : $previousEventDetails['color'];
         $newOwner = $_SESSION['username'];
+        $newSiblings = $previousEventDetails['siblings'];
+        $newSiblingsCount = $previousEventDetails['siblingsCount'];
+        $newSiblingsPath = $previousEventDetails['siblingsPath'];
         $imageFile = '';
 
         if (isset($_FILES['new-eventimage']) && $_FILES['new-eventimage']['tmp_name'] != '') {
-            $directorioImagen = "images/";
-            $imageFile = $directorioImagen . basename($_FILES['new-eventimage']['name']);
-            move_uploaded_file($_FILES['new-eventimage']['tmp_name'], $imageFile);
-
-            $unlinkSQLQuery = "SELECT `path` FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
-            $unlinkPath = mysqli_fetch_assoc(mysqli_query($conn, $unlinkSQLQuery));
-            unlink($unlinkPath['path']);
+            $imageFolder = "images/" . $congregacion . "/";
+            $imageFile = $imageFolder . basename($_FILES['new-eventimage']['name']); // Ruta final del archivo, con .pdf o .png segun corresponda.
+            // Subir el archivo PDF
+            move_uploaded_file($_FILES["new-eventimage"]["tmp_name"], $imageFile);
+            if (str_contains($_FILES['new-eventimage']['type'], "pdf")){
+                $pdfinfo = convertToPdf($imageFile, $imageFolder);
+                $imageFile = $pdfinfo["imageFile"];
+                $newSiblingsCount = $pdfinfo["siblingsCount"];
+                $newSiblingsPath = $pdfinfo["siblingsPath"];
+                $newSiblings = $pdfinfo["hasSiblings"];
+            }
         } else {
-            $imageFile = $previousEventDetails['path'];
+            $imageFile = $previousEventDetails['path']; //  Si no hay imagen no movemos nada y dejamos todo como esta.
         }
 
-        $query = "UPDATE $sqltable SET `nombre` = '$nuevoNombre', `congregacion` = '$congregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor', `dueño` = '$newOwner'";
-
+        $query = "UPDATE $sqltable SET `nombre` = '$nuevoNombre', `congregacion` = '$congregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor', `dueño` = '$newOwner', `siblings` = '$newSiblings', `siblingsCount` = '$newSiblingsCount', `siblingsPath` = '$newSiblingsPath'";
         if ($imageFile) {
             $query .= ", `path` = '$imageFile'";
         }
+        echo $nuevoNombre, $id;
         $query .= " WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
 
         if (mysqli_query($conn, $query)) {
@@ -219,7 +229,7 @@ function convertToPdf($imageFile, $imageFolder) {
     $imageFileWithoutPDF = $imageFileInfo['dirname'] . "/" . $imageFileInfo['filename'];
     
     // Comando para convertir PDF a PNG
-    $passToPDFConvert = "pdftoppm -r 500 -png " . escapeshellarg($imageFile) . " " . escapeshellarg($imageFileWithoutPDF);
+    $passToPDFConvert = "pdftoppm -r 150 -png " . escapeshellarg($imageFile) . " " . escapeshellarg($imageFileWithoutPDF);
     
     // Ejecutar la conversión
     shell_exec($passToPDFConvert);
@@ -414,9 +424,10 @@ function fetchSiblingsImages($event) {
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-                <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/admin/add-new-users"> Crear, agregar nuevos usuarios. </a>
+                
                 
                 <?php if ($is_admin && $_SESSION['hasRights'] == "0"){
+                    echo "<a class='bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white' href='/admin/add-new-users'> Crear, agregar nuevos usuarios. </a>";
                     echo "<a class='ml-4 bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white' href='/admin/users-panel'> Administrar usuarios.</a>";
                 } 
                 ?>
@@ -654,7 +665,7 @@ function fetchSiblingsImages($event) {
             <div class="absolute inset-0 bg-black bg-opacity-50"></div>
 
             <div class="container mx-auto p-4 relative z-10">
-                <h1 class="text-5xl font-bold text-center text-white mb-8">Cartelera Digital</h1>
+                <h1 class="text-5xl font-bold text-center text-white mb-8">Cartelera de anuncios</h1>
                 
                 <!-- Contenedor con fondo blanco y opacidad media -->
                 <div class="bg-white bg-opacity-80 p-8 rounded-lg shadow-lg max-w-md mx-auto">
@@ -706,8 +717,9 @@ function fetchSiblingsImages($event) {
 
             <main class="py-12">
                 <!-- Div con estilo en línea para anular las clases container y mx-auto -->
-                <div class="px-3" style="max-width: none !important; margin: 0 !important;">
-                    <div class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                <div class="p-7">
+                    <!-- Grid responsivo, ajustando el número de columnas según el tamaño de pantalla -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                         <?php 
                             // Obtener los eventos de la congregación
                             $events = getEventsEx($_SESSION['congregacion'], $sqltable); 
@@ -717,20 +729,18 @@ function fetchSiblingsImages($event) {
                             $siblingsImages = fetchSiblingsImages($event['nombre']);
                             // Codificar el array de imágenes hermanas en formato JSON
                             $siblingsImagesJson = json_encode($siblingsImages);
-                            var_dump($siblingsImages); 
-                            //var_dump($siblingsImagesJson);
                         ?>
-                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-80">
+                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-full">
                                 <!-- Imagen principal del evento -->
                                 <img src="<?php echo $event['path']; ?>"  
                                     alt="<?php echo htmlspecialchars($event['nombre']); ?> Image" 
-                                    class="event-image w-full h-20 object-cover" 
+                                    class="event-image w-full h-40 object-cover" 
                                     data-siblings-images='<?php echo $siblingsImagesJson; ?>' 
                                     onclick="openPopup('<?php echo addslashes($event['path']); ?>', this)">
 
                                 <!-- Información del evento -->
                                 <div class="p-4" style="background-color: <?php echo $event['color']; ?>">
-                                    <h2 class="text-1l font-bold mb-2"><?php echo htmlspecialchars($event['nombre']); ?></h2>
+                                    <h2 class="text-lg font-bold mb-2"><?php echo htmlspecialchars($event['nombre']); ?></h2>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -739,18 +749,40 @@ function fetchSiblingsImages($event) {
             </main>
         </div>
     <?php endif; ?>
-            
-        <!-- Pop-up de la imagen -->
     <div class="popup-image fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 hidden">
         <!-- Botón de cierre -->
         <span class="close-popup absolute top-5 right-6 text-white text-4xl cursor-pointer">&times;</span>
         
-        <!-- Imagen principal del popup -->
-        <img src="" alt="Imagen del Popup" class="popup-img" style="max-width: 99%; max-height: 99%; width: auto; height: auto;" />
-        
-        <!-- Imagen hermana del popup, inicialmente oculta -->
-        <img src="" alt="Imagen popup hermana" class="popup-img-siblings hidden m-4" style="max-width: 99%; max-height: 99%; width: auto; height: auto;" />
+        <!-- Contenedor de las imágenes -->
+        <div class="popup-content w-full xl:w-auto 2xl:w-auto justify-content items-center flex flex-col  xl:flex-row 2xl:flex-row h-auto max-h-full overflow-auto ">
+    
+            <!-- Imagen principal del popup -->
+            <img src="" alt="Imagen del Popup" 
+                class="popup-img w-auto min-h-50vh md:min-h-75vh lg:min-h-75vh xl:min-h-90vh 2xl:min-h-90vh sm:max-w-md md:max-w-lg lg:max-w-3xl xl:max-w-4xl object-contain p-4" 
+                style=" max-width: 95%; max-height: 100vh; height: auto; width: auto;" />
+            
+            <!-- Imagen hermana del popup, inicialmente oculta -->
+            <img src="" alt="Imagen popup hermana" 
+                class="popup-img-siblings w-auto min-h-50vh md:min-h-75vh lg:min-h-75vh xl:min-h-90vh 2xl:min-h-90vh  sm:max-w-md md:max-w-lg lg:max-w-3xl xl:max-w-4xl object-contain p-4 hidden " 
+                style="max-width: 95%; max-height: 100vh; height: auto; width: auto; " />
+        </div>
     </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     <!-- Scripting for image popup-->
     <script>
     let timeoutId;

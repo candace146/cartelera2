@@ -17,6 +17,8 @@ $is_admin = isset($_SESSION['admin_id']) && $_SESSION['admin_id'];
 $congregacion = $_SESSION['congregacion'] ?? null;
 $cong = $_GET['congregacion'] ?? null;
 
+
+
 // Handle congregation setting
 if (isset($_POST['congregacion']) || isset($_GET['congregacion'])) {
     $_SESSION['congregacion'] = $_POST['congregacion'] ?? $_GET['congregacion'];
@@ -39,7 +41,9 @@ $default_credentials = [
 if ($init) {
     createAdminUser($conn, $default_credentials);
 }
-
+if ($is_admin && $_SERVER['REQUEST_URI'] == '/'){
+    header('Location: /admin');
+}
 // Create new users if addnewusers is set
 if (isset($_POST['create-new-user'])) {
     $newuser = $_POST['newusername'];
@@ -57,6 +61,7 @@ if (isset($_POST['create-new-user'])) {
 
     createNewUser($newuser, $newpass, $newaccountcong, $rights);
 }
+
 // Redirect admins users to admin page if login  is set
 if ($is_admin && $_SERVER['REQUEST_URI'] == '/login'){
     header('Location: /admin');
@@ -79,14 +84,13 @@ if (isset($_POST['username']) && isset($_POST['password']) && isset($_POST['logi
 
 // Handle new event creation
 if (isset($_POST['create-event'])) {
-    $raw_name = $_POST['eventname'];
-    $name = str_replace(' ', '_', $raw_name);
+    $name = $_POST['eventname'];
     $tema = $_POST['tema'];
     $date = $_POST['eventdate'] ?? '';
     $color = $_POST['color'];
     $owner = $_SESSION['username'];
     $congregacion = $_SESSION['congregacion'];
-    $randomId = 
+    $randomId = rand();
     if (isset($_FILES['eventimage'])) {
         $imageFolder = "images/" . $congregacion . "/";
         $imageFile = $imageFolder . basename($_FILES['eventimage']['name']); // Name por .pdf
@@ -130,14 +134,13 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
     }
     
     $id = $_GET['id'];
-    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'"));
-    var_dump($previousEventDetails);
-    echo $id;
+    $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM $sqltable WHERE `id` = '$id' AND `congregacion` = '$congregacion'"));
     if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit-event'])) {
         $nuevoNombre = !empty($_POST['new-name']) ? $_POST['new-name'] : $previousEventDetails['nombre'];
         $nuevaFecha = !empty($_POST['new-eventdate']) ? $_POST['new-eventdate'] : $previousEventDetails['fecha'];
         $nuevoTema = !empty($_POST['new-tema']) ? $_POST['new-tema'] : $previousEventDetails['tema'];
         $newColor = !empty($_POST['new-color']) ? $_POST['new-color'] : $previousEventDetails['color'];
+        $randomInt = $previousEventDetails['id'];
         $newOwner = $_SESSION['username'];
         $newSiblings = $previousEventDetails['siblings'];
         $newSiblingsCount = $previousEventDetails['siblingsCount'];
@@ -155,6 +158,10 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
                 $newSiblingsCount = $pdfinfo["siblingsCount"];
                 $newSiblingsPath = $pdfinfo["siblingsPath"];
                 $newSiblings = $pdfinfo["hasSiblings"];
+            } else {
+                $newSiblings = "0"; 
+                $newSiblingsCount = "0";
+                $newSiblingsPath = "";
             }
         } else {
             $imageFile = $previousEventDetails['path']; //  Si no hay imagen no movemos nada y dejamos todo como esta.
@@ -165,7 +172,7 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
             $query .= ", `path` = '$imageFile'";
         }
         echo $nuevoNombre, $id;
-        $query .= " WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
+        $query .= " WHERE `id` = '$randomInt' AND `congregacion` = '$congregacion'";
 
         if (mysqli_query($conn, $query)) {
             header('Location: /admin');
@@ -184,7 +191,7 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
     }
     $id = $_GET['id'];
     if (isset($_POST['delete-event'])) {
-        $query = "DELETE FROM $sqltable WHERE `nombre` = '$id' AND `congregacion` = '$congregacion'";
+        $query = "DELETE FROM $sqltable WHERE `id` = '$id' AND `congregacion` = '$congregacion'";
         if (mysqli_query($conn, $query)) {
             header("Location: /admin");
             exit;
@@ -377,8 +384,7 @@ function fetchSiblingsImages($event) {
                     <br>
                     
                     <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
-                    <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="#" id="go-to-congregation">Ir a la cartelera de tu congregación</a> <!-- Preview de la cartelera-->
-
+                    <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/?congregacion=<?php echo $congregacion; ?>" id="go-to-congregation">Ir a la cartelera de tu congregación</a> <!-- Preview de la cartelera-->
                     <script>
                         document.getElementById('go-to-congregation').addEventListener('click', function(e) {
                             e.preventDefault();  // Prevenir el comportamiento por defecto del enlace
@@ -415,8 +421,8 @@ function fetchSiblingsImages($event) {
                                 <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['tema']); ?></td> <!-- Tema -->
                                 <td class="py-3 px-6 text-center"><?php echo htmlspecialchars($events['dueño']); ?></td> <!-- Quien la subio -->
                                 <td class="py-3 px-6 text-center rounded-br-lg">
-                                    <a href="/admin/edit-event?id=<?php echo $events['nombre']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
-                                    <form method="POST" action="/admin/delete-event?id=<?php echo $events['nombre']; ?>" class="inline-block">
+                                    <a href="/admin/edit-event?id=<?php echo $events['id']?>" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded inline-block mr-2">Editar</a>
+                                    <form method="POST" action="/admin/delete-event?id=<?php echo $events['id']; ?>" class="inline-block">
                                         <button type="submit" name="delete-event" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" onclick="return confirm('¿Está seguro de que desea eliminar este anuncio?')">Eliminar</button>
                                     </form>
                                 </td>
@@ -582,9 +588,9 @@ function fetchSiblingsImages($event) {
                     $events = mysqli_fetch_assoc($result);
                 ?>
                 <div class="container mx-auto">
-                    <p class="mb-4"> <b> Estas modificando el anuncio: <?php echo $_GET['id']; ?> </b> </p>
+                    <p class="mb-4"> <b> Estas modificando el anuncio con ID nro: <?php echo $_GET['id'];?>  </b> </p>
                 </div>
-                <form method="POST" action="/admin/edit-event?id=<?php echo $events['nombre']; ?>" enctype="multipart/form-data">
+                <form method="POST" action="/admin/edit-event?id=<?php echo $_GET['id']; ?>" enctype="multipart/form-data">
                     <div class="mb-4">
                             <label for="name" class="block mb-2"> Nuevo nombre del anuncio</label>
                             <input type="text" id="name" name="new-name" class="w-full p-2 border rounded">
@@ -690,28 +696,12 @@ function fetchSiblingsImages($event) {
     <?php elseif ($cong): ?>
         <div class="justify-center w-full p-8">
             <!-- Botón de "Regresar" con el href dinámico -->
-            <a id="back-button" href="/" class="bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white">Regresar</a>
+            <a name='back' id='back-button' href='/' class='bg-green-400 hover:bg-green-500 rounded py-2 px-2 mt-2 mb-2 text-white'>Regresar</a>
+           
             
-
-            <script>
-                // Obtener el Referer almacenado desde localStorage
-                const referer = localStorage.getItem('referer');
-
-                // Verificar si existe un Referer almacenado
-                if (referer) {
-                    // Si existe un Referer, actualizar el href del botón de regreso
-                    const backButton = document.getElementById('back-button');
-                    backButton.href = referer;  // Actualizamos el href con la URL del Referer
-                    backButton.textContent = 'Regresar a Admin';  // Cambiar el texto si el Referer existe
-                } else {
-                    // Si no hay Referer almacenado, el botón regresará a la página principal
-                    const backButton = document.getElementById('back-button');
-                    backButton.href = '/';  // De lo contrario, regresamos a la página principal
-                    backButton.textContent = 'Regresar';  // Texto original del botón
-                }
-            </script>
+            
             <h1 class="text-3xl font-bold text-center mb-4 pt-4">
-                    Cartelera de la congregación <?php echo ($_SESSION['congregacion'] == "andes") ? "Los Andes" : "Liniers"; ?>
+                    Cartelera de la congregación <?php echo ($cong == "andes") ? "Los Andes" : "Liniers"; ?>
                 </h1>
             <hr class="border-t-4 border-gray-300">
 

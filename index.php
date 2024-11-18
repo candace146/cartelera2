@@ -666,7 +666,7 @@ function fetchSiblingsImages($event) {
         </div>
     <!-- Select Congregation -->
     <?php elseif (!$cong): ?>
-        <div class="relative min-h-screen bg-cover bg-center" style="background-image: url('fondo.jpg');">
+        <div class="relative min-h-screen bg-cover bg-center max-w-100vh" style="background-image: url('fondo.jpg');">
             <!-- Filtro oscuro para que el contenido sea legible (opcional) -->
             <div class="absolute inset-0 bg-black bg-opacity-50"></div>
 
@@ -679,7 +679,7 @@ function fetchSiblingsImages($event) {
                     
                     <form action="index.php" class="flex flex-col items-center mt-4">
                         <select name="congregacion" id="congregacion-select" class="border rounded p-2 mb-4 w-full">
-                            <option value="andes">Los Andes</option>
+                            <option value="andes">Plaza los Andes</option>
                             <option value="liniers">Liniers</option>
                         </select>
                         <button class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 w-full" type="submit">Entrar a la cartelera</button>
@@ -701,7 +701,7 @@ function fetchSiblingsImages($event) {
             
             
             <h1 class="text-3xl font-bold text-center mb-4 pt-4">
-                    Cartelera de la congregación <?php echo ($cong == "andes") ? "Los Andes" : "Liniers"; ?>
+                    Cartelera de la congregación <?php echo ($cong == "andes") ? " Plaza los Andes" : "Liniers"; ?>
                 </h1>
             <hr class="border-t-4 border-gray-300">
 

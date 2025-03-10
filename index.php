@@ -202,19 +202,14 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
 }
 
 if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUEST_URI'], '/admin/delete-user')) {
-    if (empty($_POST['delete-user'])){
-        header("Location: /admin");
-        exit;
-    }
-
     $name = $_GET['id'];
     if (isset($_POST['delete-user'])){
-        $query = "DELETE FROM $sqltable WHERE `nombre` = '$name' AND  `congregacion` = '$congregacion'";
+        $query = "DELETE FROM $sqltable WHERE `name` = '$name' AND  `congregacion` = '$congregacion'";
         if (mysqli_query($conn, $query)){
             header("Location: /admin");
             exit;
         } else {
-            $delete_event_error = "Error al eliminar el evento: " . mysqli_error($conn);
+            $delete_event_error = "Error al eliminar el anuncio: " . mysqli_error($conn);
         }
 
     }

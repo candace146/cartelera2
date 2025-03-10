@@ -204,7 +204,7 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
 if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUEST_URI'], '/admin/delete-user')) {
     $name = $_GET['id'];
     if (isset($_POST['delete-user'])){
-        $query = "DELETE FROM 'usuarios' WHERE `name` = '$name' AND  `congregacion` = '$congregacion'";
+        $query = "DELETE FROM `usuarios` WHERE `name` = '$name' AND  `congregacion` = '$congregacion'";
         if (mysqli_query($conn, $query)){
             header("Location: /admin");
             exit;

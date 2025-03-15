@@ -6,6 +6,9 @@ define('DATABASE_HOST', '127.0.0.1');
 define('DATABASE_USER', 'root');
 define('DATABASE_PASSWD', '');
 define('DATABASE_NAME', 'cartelera');
+define('BACKUP_LOG', 'backups\backups.log');
+define('DATE', date('Y-m-d-H:i:s'));
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $conn = mysqli_connect(DATABASE_HOST, DATABASE_USER, DATABASE_PASSWD, DATABASE_NAME);
 if (!$conn) {
@@ -16,8 +19,15 @@ if (!$conn) {
 $is_admin = isset($_SESSION['admin_id']) && $_SESSION['admin_id'];
 $congregacion = $_SESSION['congregacion'] ?? null;
 $cong = $_GET['congregacion'] ?? null;
-
-
+$colorTable = [
+    'salidas' => '#82e0aa',
+    'acomodadores_microfonistas' => '#85c1e9',
+    'audio_video_plataforma' => '#e59866',
+    'grupos' => '#daf7a6',
+    'reuniones_entre_semana' => '#d2b4de',
+    'reuniones_fin_semana' => '#d2b4de',
+    'cartas' => '#f8c471'
+];
 
 // Handle congregation setting
 if (isset($_POST['congregacion']) || isset($_GET['congregacion'])) {
@@ -87,10 +97,11 @@ if (isset($_POST['create-event'])) {
     $name = $_POST['eventname'];
     $tema = $_POST['tema'];
     $date = $_POST['eventdate'] ?? '';
-    $color = $_POST['color'];
+    $color = $colorTable[$tema];
     $owner = $_SESSION['username'];
     $congregacion = $_SESSION['congregacion'];
     $randomId = rand();
+
     if (isset($_FILES['eventimage'])) {
         $imageFolder = "images/" . $congregacion . "/";
         $imageFile = $imageFolder . basename($_FILES['eventimage']['name']); // Name por .pdf
@@ -139,7 +150,7 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
         $nuevoNombre = !empty($_POST['new-name']) ? $_POST['new-name'] : $previousEventDetails['nombre'];
         $nuevaFecha = !empty($_POST['new-eventdate']) ? $_POST['new-eventdate'] : $previousEventDetails['fecha'];
         $nuevoTema = !empty($_POST['new-tema']) ? $_POST['new-tema'] : $previousEventDetails['tema'];
-        $newColor = !empty($_POST['new-color']) ? $_POST['new-color'] : $previousEventDetails['color'];
+        $newColor = !empty($_POST['new-tema']) ? $colorTable[$_POST['new-tema']] : $previousEventDetails['color'];
         $randomInt = $previousEventDetails['id'];
         $newOwner = $_SESSION['username'];
         $newSiblings = $previousEventDetails['siblings'];
@@ -209,7 +220,7 @@ if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUES
 
     $name = $_GET['id'];
     if (isset($_POST['delete-user'])){
-        $query = "DELETE FROM $sqltable WHERE `nombre` = '$name' AND  `congregacion` = '$congregacion'";
+        $query = "DELETE FROM `usuarios`  WHERE `nombre` = '$name' AND  `congregacion` = '$congregacion'";
         if (mysqli_query($conn, $query)){
             header("Location: /admin");
             exit;
@@ -219,7 +230,10 @@ if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUES
 
     }
 }
-
+// Force backup 
+if (str_contains($_SERVER['REQUEST_URI'], '/admin/force-backup')) {
+    getSystemBackups();
+}
 // Handle logout
 if (isset($_POST['logout'])) {
     session_destroy();
@@ -229,7 +243,87 @@ if (isset($_POST['logout'])) {
 
 // Functions
 
+function getSystemUsers(){
+    global $conn;
+    $query = "SELECT * FROM `usuarios`";
+    $result = mysqli_query($conn, $query);
+    $users = [];
+    while ($user = mysqli_fetch_assoc($result)) {
+        $users[] = $user;
+    }
+    return $users;
+}
 
+function getSystemLogs(){
+    //Gettings logs
+
+
+}
+
+function getSystemBackups(){
+    // Get the backups schedule and make the backups
+    global $conn;
+    $backupDirectory = ".\\backups\\";
+    if (!file_exists($backupDirectory)) {
+        mkdir($backupDirectory);
+    }
+    $backupStream = rand();
+    $backupLogHandle = fopen(BACKUP_LOG, 'a');
+    $backupSql = "$backupDirectory" . "backup-" . date("Y_m_d_H_i_s") . ".sql";
+    $backupZip = "$backupDirectory" . "backup-" . date("Y_m_d_H_i_s") . ".zip";
+    $backupCommand = "mysqldump cartelera -u root >" . $backupSql;
+
+    // Create the backup
+    exec($backupCommand, $output, $return);
+    if ($return === 0) {
+        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]" . "Backup command returned status code 0 at " . DATE . "\n");
+        if (file_exists($backupSql)){
+            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup file created at " . DATE . " founded in:" . $backupSql . "\n");
+            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Compressing backup file at " . DATE . "\n");
+            $zip = new ZipArchive();
+            if ($zip->open($backupZip, ZipArchive::CREATE) === TRUE) {
+                $zip->addFile(realpath($backupSql), basename($backupSql));
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup file compressed at " . DATE . " founded in:" . $backupZip . "\n");
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Starting compress folder process at " . DATE . "\n");
+                $imagesFolder = "./images/";
+                $imagesFiles = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($imagesFolder), RecursiveIteratorIterator::SELF_FIRST);
+                foreach ($imagesFiles as $imageFile) {
+                    $imageFilePath = realpath($imageFile);
+                    $relativeImagePath = $imagesFolder . substr($imageFilePath, strlen($imagesFolder) + 1);
+                    if (is_dir($imageFilePath)) {
+                        $zip->addEmptyDir($relativeImagePath); // Add empty directories
+                    } else {
+                        $zip->addFile($imageFilePath, $relativeImagePath); // Add files
+                    }
+
+                    return $zip->close();
+                }
+                $zip->close();
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Images folder compressed at " . DATE . "\n");
+            } else {
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Error compressing backup file at " . DATE . "\n");
+            }
+        }
+    } else {
+        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup command returned status code " . $return . " at " . DATE . "\n");
+    }
+}
+
+function getSystemHealth(){
+
+}
+function getSystemInfo(){
+    // Get the system information, backups schedule, versions, health, etc
+    $systemInfo = [
+        'systemName' => 'Tablero de Anuncios',
+        'systemVersion' => '1.1',
+        'systemHealth' => getSystemHealth(),
+        'systemBackups' => getSystemBackups(),
+        'systemUsers' => getSystemUsers(),
+        'systemLogs' => getSystemLogs()
+    ];
+
+}
 function convertToPdf($imageFile, $imageFolder) {
     // Eliminar la extensión .pdf para generar los archivos PNG
     $imageFileInfo = pathinfo($imageFile);
@@ -249,10 +343,13 @@ function convertToPdf($imageFile, $imageFolder) {
     if (count($siblings) > 0) {
         $hasSiblings = "1"; // Segunda imagen PNG generada, ya que la primera siempre es la misma
         $siblingsCount = count($siblings); // Contamos cuántos archivos PNG se generaron
-        $siblingsPath = $siblings[1];  // Usamos la ruta del SEGUNDO archivo generado, es la que se mostrara a la derecha al tocar en una imagen que tenga siblings
-
+        $siblingsPath = ""; // Usamos la ruta del SEGUNDO archivo generado, es la que se mostrara a la derecha al tocar en una imagen que tenga siblings
+        foreach ($siblings as $sibling) {
+            $siblingsPath .= $sibling . ";"; // Concatenamos las rutas de los archivos PNG generados Archivo-1;Archivo-2;Archivo-3; ->  A ; A
+        }
+        // echo $siblings[0];
         // Retornar los valores necesarios
-        $imageFile = $imageFileInfo['dirname']. '/' . $imageFileInfo['filename'] . '-1.png';
+        $imageFile = $siblings[0];
         return [
             'hasSiblings' => $hasSiblings,
             'imageFile' => $imageFile,
@@ -280,6 +377,11 @@ function authenticate($username, $password) {
     $sqlquery = "SELECT * FROM usuarios WHERE `name` = '$username' AND `passwd` = '$password'";
     $result = mysqli_query($conn, $sqlquery);
     $admin = mysqli_fetch_assoc($result);
+    if (!$admin) {
+        echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Credenciales inválidas</div>";
+        $_SESSION["admin_id"] = "";
+        return;
+    }
     if ($admin['passwd'] === $password && $admin['name'] === $username) {
         $_SESSION['congregacion'] = $admin['congregacion'];
         $_SESSION["admin_id"] = "1";
@@ -287,9 +389,6 @@ function authenticate($username, $password) {
         $_SESSION['hasRights'] = $admin['rights'];
         header("Location: /admin");
         exit;
-    } else {
-        echo "<div class='bg-red-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Credenciales inválidas</div>";
-        $_SESSION["admin_id"] = "";
     }
 }
 
@@ -363,7 +462,7 @@ function fetchSiblingsImages($event) {
                         </div>
                         <div class="mb-4">
                             <label for="password" class="block mb-2">Contraseña</label>
-                            <input type="text" id="password" name="password" required class="w-full p-2 border rounded">
+                            <input type="password" id="password" name="password" required class="w-full p-2 border rounded">
                         </div>
                         <button type="submit" name="login" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded">
                             Ingresar
@@ -382,6 +481,9 @@ function fetchSiblingsImages($event) {
                     <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
                     <hr class="border-t-3 border-gray-300">
                     <br>
+                
+
+                    
                     
                     <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
                     <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/?congregacion=<?php echo $congregacion; ?>" id="go-to-congregation">Ir a la cartelera de tu congregación</a> <!-- Preview de la cartelera-->
@@ -584,11 +686,11 @@ function fetchSiblingsImages($event) {
                 </div>
                 <?php 
                     $congregacion = $_SESSION['congregacion'];
-                    $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion'");
+                    $result = mysqli_query($conn, "SELECT * FROM $sqltable WHERE congregacion = '$congregacion' AND `id` = '$id'");
                     $events = mysqli_fetch_assoc($result);
                 ?>
                 <div class="container mx-auto">
-                    <p class="mb-4"> <b> Estas modificando el anuncio con ID nro: <?php echo $_GET['id'];?>  </b> </p>
+                    <p class="mb-4"> <b> Estas modificando el anuncio: <?php echo $events["nombre"];?>  </b> </p>
                 </div>
                 <form method="POST" action="/admin/edit-event?id=<?php echo $_GET['id']; ?>" enctype="multipart/form-data">
                     <div class="mb-4">
@@ -613,10 +715,6 @@ function fetchSiblingsImages($event) {
                     <div class="mb-4">
                         <label for="image" class="block mb-2"> Nueva imagen (PNG o JPG)</label>
                         <input type="file" id="image" name="new-eventimage" class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                            <label for="cong" class="block mb-2">Nuevo color del cuadro del anuncio</label>
-                            <input type="color" name="new-color" id="color" class="p-2 border rounded">
                     </div>
                     <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
                 </form>
@@ -655,10 +753,6 @@ function fetchSiblingsImages($event) {
                             <label for="image" class="block mb-2">Imagen (PNG o JPG)</label>
                             <input type="file" id="image" name="eventimage" class="w-full p-2 border rounded">
                         </div>
-                        <div class="mb-4">
-                            <label for="cong" class="block mb-2">Color del cuadro del anuncio</label>
-                            <input type="color" name="color" id="color" class="p-2 border rounded">
-                        </div>
                         <button type="submit" name="create-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Añadir anuncio</button>
                     </form>
                 </div>
@@ -671,7 +765,7 @@ function fetchSiblingsImages($event) {
             <div class="absolute inset-0 bg-black bg-opacity-50"></div>
 
             <div class="container mx-auto p-4 relative z-10">
-                <h1 class="text-5xl font-bold text-center text-white mb-8">Cartelera de anuncios</h1>
+                <h1 class="text-5xl font-bold text-center text-white mb-8">Tablero de Anuncios</h1>
                 
                 <!-- Contenedor con fondo blanco y opacidad media -->
                 <div class="bg-white bg-opacity-80 p-8 rounded-lg shadow-lg max-w-md mx-auto">
@@ -679,7 +773,7 @@ function fetchSiblingsImages($event) {
                     
                     <form action="index.php" class="flex flex-col items-center mt-4">
                         <select name="congregacion" id="congregacion-select" class="border rounded p-2 mb-4 w-full">
-                            <option value="andes">Plaza los Andes</option>
+                            <option value="andes">Plaza Los Andes</option>
                             <option value="liniers">Liniers</option>
                         </select>
                         <button class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 w-full" type="submit">Entrar a la cartelera</button>
@@ -700,10 +794,11 @@ function fetchSiblingsImages($event) {
            
             
             
-            <h1 class="text-3xl font-bold text-center mb-4 pt-4">
-                    Cartelera de la congregación <?php echo ($cong == "andes") ? " Plaza los Andes" : "Liniers"; ?>
-                </h1>
-            <hr class="border-t-4 border-gray-300">
+            <h1 class="text-3xl font-bold text-center sticky z-100 top-0  mb-1 pt-2 bg-gray-100">
+                    Congregación - <?php echo ($cong == "andes") ? '"Plaza Los Andes"' : '"Liniers"'; ?>
+                    <hr class=" mt-5 border-t-4 border-gray-300">
+            </h1>
+            
 
             <main class="py-12">
                 <!-- Div con estilo en línea para anular las clases container y mx-auto -->
@@ -720,7 +815,7 @@ function fetchSiblingsImages($event) {
                             // Codificar el array de imágenes hermanas en formato JSON
                             $siblingsImagesJson = json_encode($siblingsImages);
                         ?>
-                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-full">
+                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-full" style="background-color:'<?php echo $event['color'];?>'">
                                 <!-- Imagen principal del evento -->
                                 <img src="<?php echo $event['path']; ?>"  
                                     alt="<?php echo htmlspecialchars($event['nombre']); ?> Image" 
@@ -729,7 +824,7 @@ function fetchSiblingsImages($event) {
                                     onclick="openPopup('<?php echo addslashes($event['path']); ?>', this)">
 
                                 <!-- Información del evento -->
-                                <div class="p-4" style="background-color: <?php echo $event['color']; ?>">
+                                <div class="p-4" style="background-color:<?php echo $event['color'];?>">
                                     <h2 class="text-lg font-bold mb-2"><?php echo htmlspecialchars($event['nombre']); ?></h2>
                                 </div>
                             </div>
@@ -745,7 +840,8 @@ function fetchSiblingsImages($event) {
         
         <!-- Contenedor de las imágenes -->
         <div class="popup-content w-full xl:w-auto 2xl:w-auto justify-content items-center flex flex-col  xl:flex-row 2xl:flex-row h-auto max-h-full overflow-auto ">
-    
+        <button class="popup-arrow-left text-white text-3xl hidden m-50" onclick="changeImage('prev')"><</button>
+        
             <!-- Imagen principal del popup -->
             <img src="" alt="Imagen del Popup" 
                 class="popup-img w-auto min-h-50vh md:min-h-75vh lg:min-h-75vh xl:min-h-90vh 2xl:min-h-90vh sm:max-w-md md:max-w-lg lg:max-w-3xl xl:max-w-4xl object-contain p-4" 
@@ -755,69 +851,107 @@ function fetchSiblingsImages($event) {
             <img src="" alt="Imagen popup hermana" 
                 class="popup-img-siblings w-auto min-h-50vh md:min-h-75vh lg:min-h-75vh xl:min-h-90vh 2xl:min-h-90vh  sm:max-w-md md:max-w-lg lg:max-w-3xl xl:max-w-4xl object-contain p-4 hidden " 
                 style="max-width: 95%; max-height: 100vh; height: auto; width: auto; " />
+        
+        <button class="popup-arrow-right text-white text-3xl hidden m-50" onclick="changeImage('next')">></button>                  
         </div>
     </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
     <!-- Scripting for image popup-->
     <script>
     let timeoutId;
-    
+    let siblingsPath = [];
+    let currentIndex = 0; // Índice de navegación
+
+    function changeImage(direction) {
+        if (siblingsPath.length <= 2) return; // No hacer nada si hay 2 imágenes o menos
+
+        const totalPairs = Math.ceil(siblingsPath.length / 2); // Cantidad de pares disponibles
+
+        if (direction === 'next') {
+            currentIndex = (currentIndex + 2) % siblingsPath.length;
+        } else if (direction === 'prev') {
+            currentIndex = (currentIndex - 2 + siblingsPath.length) % siblingsPath.length;
+        }
+
+        renderImages();
+    }
+
     function openPopup(imageSrc, imgElement) {
         const popupImage = document.querySelector('.popup-image');
         const popupImgTag = document.querySelector('.popup-img');
         const popupSiblingImgTag = document.querySelector('.popup-img-siblings');
-        
+
         // Mostrar el pop-up y establecer la imagen principal
         popupImage.classList.remove('hidden');
         popupImgTag.src = imageSrc;
-        popupImgTag.style.objectPosition = 'left top'; // Ajuste de la posición de la imagen
-        
-        // Obtener las imágenes hermanas desde el atributo `data-siblings-images` del elemento
-        const siblingsPath = JSON.parse(imgElement.getAttribute('data-siblings-images'));
-        console.log(siblingsPath);
-        // Verificar si hay imágenes hermanas y mostrarlas
-        if (siblingsPath != "") {
-            popupSiblingImgTag.src = siblingsPath[0]; // Asignar la primera imagen hermana
-            popupSiblingImgTag.classList.remove('hidden'); // Mostrar la imagen hermana
-        } else {
-            popupSiblingImgTag.classList.add('hidden'); // Ocultar la imagen hermana si no hay
-        }
-        
-        // Reiniciar el temporizador de inactividad
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(returnToGallery, 60000); // 1 minuto de inactividad
+        popupImgTag.style.objectPosition = 'left top';
+
+        // Obtener imágenes hermanas y filtrar vacíos
+        siblingsPath = JSON.parse(imgElement.getAttribute('data-siblings-images') || "[]")
+            .filter(path => path.trim() !== "");
+
+        console.log("Imágenes hermanas:", siblingsPath);
+
+        // Reiniciar índice en la imagen seleccionada
+        currentIndex = siblingsPath.indexOf(imageSrc);
+        if (currentIndex === -1) currentIndex = 0;
+
+        renderImages();
+        updateNavigation();
     }
-    // Función para cerrar el pop-up
-    document.querySelector('.close-popup').addEventListener('click', function() {
+
+    // Renderizar imágenes en pares (1-2, 3-4, ...)
+    function renderImages() {
+        const popupImgTag = document.querySelector('.popup-img');
+        const popupSiblingImgTag = document.querySelector('.popup-img-siblings');
+
+        if (siblingsPath.length === 0) return;
+
+        popupImgTag.src = siblingsPath[currentIndex]; // 1-3-5-7-9-11 en la derecha
+
+        let nextIndex = currentIndex + 1;
+        if (nextIndex < siblingsPath.length) {
+            popupSiblingImgTag.src = siblingsPath[nextIndex];
+            popupSiblingImgTag.classList.remove('hidden');
+        } else {
+            popupSiblingImgTag.classList.add('hidden');
+        }
+    }
+
+    // Mostrar/ocultar navegación
+    function updateNavigation() {
+        const leftArrow = document.querySelector('.popup-arrow-left');
+        const rightArrow = document.querySelector('.popup-arrow-right');
+
+        const hasMultiplePairs = siblingsPath.length > 2;
+
+        leftArrow.classList.toggle('hidden', !hasMultiplePairs);
+        rightArrow.classList.toggle('hidden', !hasMultiplePairs);
+    }
+
+    // Cerrar el pop-up
+    document.querySelector('.close-popup').addEventListener('click', function () {
         document.querySelector('.popup-image').classList.add('hidden');
-        clearTimeout(timeoutId); // Limpiar el temporizador al cerrar el pop-up
+        document.querySelector('.popup-img-siblings').classList.add('hidden');
+        clearTimeout(timeoutId);
     });
 
-    document.addEventListener('click', resetTimeout); 
+    // Reiniciar temporizador en actividad
+    document.addEventListener('click', resetTimeout);
 
     function resetTimeout() {
-        clearTimeout(timeoutId); 
-        timeoutId = setTimeout(returnToGallery, 120000); // Reinicia después de 2 minutos de inactividad
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(returnToGallery, 120000);
     }
 
+    // Cerrar galería por inactividad
     function returnToGallery() {
-        document.querySelector('.popup-image').classList.add('hidden'); 
+        document.querySelector('.popup-image').classList.add('hidden');
     }
+
+
     </script>
 
    

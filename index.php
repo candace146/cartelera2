@@ -8,6 +8,7 @@ define('DATABASE_PASSWD', '');
 define('DATABASE_NAME', 'cartelera');
 define('BACKUP_LOG', 'backups\backups.log');
 define('DATE', date('Y-m-d-H:i:s'));
+define('BACKUP_SCHEDULE_CONF', 'backups\backups.conf');
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $conn = mysqli_connect(DATABASE_HOST, DATABASE_USER, DATABASE_PASSWD, DATABASE_NAME);
@@ -101,12 +102,13 @@ if (isset($_POST['create-event'])) {
     $owner = $_SESSION['username'];
     $congregacion = $_SESSION['congregacion'];
     $randomId = rand();
-
     if (isset($_FILES['eventimage'])) {
         $imageFolder = "images/" . $congregacion . "/";
         $imageFile = $imageFolder . basename($_FILES['eventimage']['name']); // Name por .pdf
-        
-        // Subir el archivo PDF
+        $hasSiblings = "0";
+        $siblingsCount = "0";
+        $siblingsPath = "";
+        $fromPdf = "0";
         move_uploaded_file($_FILES["eventimage"]["tmp_name"], $imageFile);
         if (str_contains($_FILES['eventimage']['type'], "pdf")){
             $pdfinfo = convertToPdf($imageFile, $imageFolder);
@@ -114,17 +116,45 @@ if (isset($_POST['create-event'])) {
             $siblingsCount = $pdfinfo["siblingsCount"];
             $siblingsPath = $pdfinfo["siblingsPath"];
             $hasSiblings = $pdfinfo["hasSiblings"];
-        } else {
-            $imageFile = $imageFile;
-            $siblingsCount = "0";
-            $siblingsPath = "";
-            $hasSiblings = "0";
+            $fromPdf = "1";
+        } 
+        $maxManualSiblingsImages = 5;
+        for ($i = 0; $i < $maxManualSiblingsImages; $i++){
+            $indexKey = "eventimage" . $i;
+            if (isset($_FILES[$indexKey]) && $_FILES[$indexKey] != ""){
+                $manualSiblingPath = $imageFolder . basename($_FILES[$indexKey]['name']);
+                move_uploaded_file($_FILES[$indexKey]["tmp_name"], $manualSiblingPath);
+                $hasSiblings = "1";
+                $siblingsCount = strval($i + 2);
+                if ($i == 0){
+                    $siblingsPath = $imageFile . ";";
+                }
+                $siblingsPath .= $manualSiblingPath . ";";
+            }
         }
-        
-        
+
+        /* 
+            Algoritmo sin tantos condicionales
+
+            $maxManualSiblingsImages = 4;
+            $siblingsCount = "0";
+            $hasSiblings = "0";
+            $siblingsPath = "";
+            for ($i = 0; $i < $maxManualSiblingsImages; $i++){
+                $indexKey = "eventimage" . $i
+                if (isset($_FILES[$indexKey])){
+                    $manualSiblingPath = $imageFolder . basename($_FILES[$indexKey]['name']);
+                    move_uploaded_file($_FILES[$indexKey]["tmp_name"], $manualSiblingPath);
+                    $hasSiblings = "1";
+                    $siblingsCount = strval($i + 2);
+                    $siblingsPath .= $manualSiblingPath . ";";
+                }
+            }
+
+        */
         // Insertar en la base de datos
-        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`, `id`) 
-                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '$hasSiblings', '$siblingsCount', '$siblingsPath', '$randomId')";
+        $query = "INSERT INTO $sqltable (`nombre`, `path`, `congregacion`, `tema`, `fecha`, `color`, `dueño`, `siblings`, `siblingsCount`, `siblingsPath`, `fromPdf`, `id`) 
+                  VALUES ('$name', '$imageFile', '$congregacion', '$tema', '$date', '$color', '$owner', '$hasSiblings', '$siblingsCount', '$siblingsPath','$fromPdf', '$randomId')";
         
         if (mysqli_query($conn, $query)) {
             echo "<div class='bg-green-400 text-white p-4 rounded shadow-md mb-4 font-semibold w-48 text-center mx-auto mt-4'>Evento creado exitosamente</div>";
@@ -147,20 +177,27 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
     $id = $_GET['id'];
     $previousEventDetails = mysqli_fetch_assoc(mysqli_query($conn, "SELECT * FROM $sqltable WHERE `id` = '$id' AND `congregacion` = '$congregacion'"));
     if ($is_admin && $_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit-event'])) {
+        print_r($_POST);
         $nuevoNombre = !empty($_POST['new-name']) ? $_POST['new-name'] : $previousEventDetails['nombre'];
         $nuevaFecha = !empty($_POST['new-eventdate']) ? $_POST['new-eventdate'] : $previousEventDetails['fecha'];
         $nuevoTema = !empty($_POST['new-tema']) ? $_POST['new-tema'] : $previousEventDetails['tema'];
-        $newColor = !empty($_POST['new-tema']) ? $colorTable[$_POST['new-tema']] : $previousEventDetails['color'];
+        $newColor = !empty($_POST['new-tema']) ? $colorTable[$_POST['new-tema']] : $colorTable[$previousEventDetails['color']];
         $randomInt = $previousEventDetails['id'];
         $newOwner = $_SESSION['username'];
-        $newSiblings = $previousEventDetails['siblings'];
-        $newSiblingsCount = $previousEventDetails['siblingsCount'];
-        $newSiblingsPath = $previousEventDetails['siblingsPath'];
+        $newSiblings = $previousEventDetails['siblings']; // It can be 0 or 1
+        $newSiblingsCount = $previousEventDetails['siblingsCount']; // It can be 0 or greater than 0
+        $newSiblingsPath = $previousEventDetails['siblingsPath']; // It can be ""
+        $fromPdf  = "0"; // 0 or 1
         $imageFile = '';
+        
 
+        // To change new event image and set new event's sibling images
         if (isset($_FILES['new-eventimage']) && $_FILES['new-eventimage']['tmp_name'] != '') {
             $imageFolder = "images/" . $congregacion . "/";
             $imageFile = $imageFolder . basename($_FILES['new-eventimage']['name']); // Ruta final del archivo, con .pdf o .png segun corresponda.
+            $newSiblings = "0"; 
+            $newSiblingsCount = "0";
+            $newSiblingsPath = "";
             // Subir el archivo PDF
             move_uploaded_file($_FILES["new-eventimage"]["tmp_name"], $imageFile);
             if (str_contains($_FILES['new-eventimage']['type'], "pdf")){
@@ -169,16 +206,42 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/edit-event')) {
                 $newSiblingsCount = $pdfinfo["siblingsCount"];
                 $newSiblingsPath = $pdfinfo["siblingsPath"];
                 $newSiblings = $pdfinfo["hasSiblings"];
-            } else {
-                $newSiblings = "0"; 
-                $newSiblingsCount = "0";
-                $newSiblingsPath = "";
+                $fromPdf = "1";
             }
+            $maxManualSiblingsImages = 5;
+            for ($i = 0; $i < $maxManualSiblingsImages; $i++){
+                $indexKey = "eventimage" . $i;
+                if (isset($_FILES[$indexKey]) && $_FILES[$indexKey] != ""){
+                    $manualSiblingPath = $imageFolder . basename($_FILES[$indexKey]['name']);
+                    move_uploaded_file($_FILES[$indexKey]["tmp_name"], $manualSiblingPath);
+                    $newSiblings = "1";
+                    $newSiblingsCount = strval($i + 2);
+                    if ($i == 0){
+                        $newSiblingsPath = $imageFile . ";";
+                    }
+                    $newSiblingsPath .= $manualSiblingPath . ";";
+                }
+            }
+
         } else {
             $imageFile = $previousEventDetails['path']; //  Si no hay imagen no movemos nada y dejamos todo como esta.
+            $maxManualSiblingsImages = 5;
+            for ($i = 0; $i < $maxManualSiblingsImages; $i++){
+                $indexKey = "eventimage" . $i;
+                if (isset($_FILES[$indexKey]) && $_FILES[$indexKey] != ""){
+                    $manualSiblingPath = $imageFolder . basename($_FILES[$indexKey]['name']);
+                    move_uploaded_file($_FILES[$indexKey]["tmp_name"], $manualSiblingPath);
+                    $newSiblings = "1";
+                    $newSiblingsCount = strval($i + 2);
+                    if ($i == 0){
+                        $newSiblingsPath = $imageFile . ";";
+                    }
+                    $newSiblingsPath .= $manualSiblingPath . ";";
+                }
+            }
         }
 
-        $query = "UPDATE $sqltable SET `nombre` = '$nuevoNombre', `congregacion` = '$congregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor', `dueño` = '$newOwner', `siblings` = '$newSiblings', `siblingsCount` = '$newSiblingsCount', `siblingsPath` = '$newSiblingsPath'";
+        $query = "UPDATE $sqltable SET `nombre` = '$nuevoNombre', `congregacion` = '$congregacion', `tema` = '$nuevoTema', `fecha` = '$nuevaFecha', `color` = '$newColor', `dueño` = '$newOwner', `siblings` = '$newSiblings', `siblingsCount` = '$newSiblingsCount', `siblingsPath` = '$newSiblingsPath', `fromPdf` = '$fromPdf'";
         if ($imageFile) {
             $query .= ", `path` = '$imageFile'";
         }
@@ -213,11 +276,6 @@ if ($is_admin && str_contains($_SERVER['REQUEST_URI'], '/admin/delete-event')) {
 }
 
 if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUEST_URI'], '/admin/delete-user')) {
-    if (empty($_POST['delete-user'])){
-        header("Location: /admin");
-        exit;
-    }
-
     $name = $_GET['id'];
     if (isset($_POST['delete-user'])){
         $query = "DELETE FROM `usuarios`  WHERE `nombre` = '$name' AND  `congregacion` = '$congregacion'";
@@ -225,7 +283,7 @@ if ($is_admin && $_SESSION['hasRights'] == "0" &&  str_contains($_SERVER['REQUES
             header("Location: /admin");
             exit;
         } else {
-            $delete_event_error = "Error al eliminar el evento: " . mysqli_error($conn);
+            $delete_event_error = "Error al eliminar el anuncio: " . mysqli_error($conn);
         }
 
     }
@@ -262,6 +320,7 @@ function getSystemLogs(){
 
 function getSystemBackups(){
     // Get the backups schedule and make the backups
+   
     global $conn;
     $backupDirectory = ".\\backups\\";
     if (!file_exists($backupDirectory)) {
@@ -273,55 +332,63 @@ function getSystemBackups(){
     $backupZip = "$backupDirectory" . "backup-" . date("Y_m_d_H_i_s") . ".zip";
     $backupCommand = "mysqldump cartelera -u root >" . $backupSql;
 
+   
     // Create the backup
     exec($backupCommand, $output, $return);
     if ($return === 0) {
-        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]" . "Backup command returned status code 0 at " . DATE . "\n");
+        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]" . " Backup command returned status code 0 at " . DATE . "\n");
         if (file_exists($backupSql)){
-            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup file created at " . DATE . " founded in:" . $backupSql . "\n");
-            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Compressing backup file at " . DATE . "\n");
+            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Backup file created at " . DATE . " founded in:" . $backupSql . "\n");
+            fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Compressing backup file at " . DATE . "\n");
             $zip = new ZipArchive();
             if ($zip->open($backupZip, ZipArchive::CREATE) === TRUE) {
                 $zip->addFile(realpath($backupSql), basename($backupSql));
-                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup file compressed at " . DATE . " founded in:" . $backupZip . "\n");
-                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Starting compress folder process at " . DATE . "\n");
-                $imagesFolder = "./images/";
-                $imagesFiles = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($imagesFolder), RecursiveIteratorIterator::SELF_FIRST);
-                foreach ($imagesFiles as $imageFile) {
-                    $imageFilePath = realpath($imageFile);
-                    $relativeImagePath = $imagesFolder . substr($imageFilePath, strlen($imagesFolder) + 1);
-                    if (is_dir($imageFilePath)) {
-                        $zip->addEmptyDir($relativeImagePath); // Add empty directories
-                    } else {
-                        $zip->addFile($imageFilePath, $relativeImagePath); // Add files
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Backup file compressed at " . DATE . " founded in:" . $backupZip . "\n");
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Starting compress folder process at " . DATE . "\n");
+                $folders = glob(".\\images\\" . "*");
+                foreach ($folders as $folder) {
+                    $zip->addEmptyDir(basename($folder));
+                    $files = glob($folder . "\\*");
+                    foreach ($files as $file) {
+                        if (str_contains($file, ".\\images\\andes")){
+                            $zip->addFile($file, "andes\\". basename($file));
+                        } elseif (str_contains($file, ".\\images\\liniers")){
+                            $zip->addFile($file, "liniers\\" . basename($file));
+                        }
                     }
-
-                    return $zip->close();
                 }
                 $zip->close();
-                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Images folder compressed at " . DATE . "\n");
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Images folder compressed at " . DATE . "\n");
+                // Write to ini file
+
+                
             } else {
-                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Error compressing backup file at " . DATE . "\n");
+                fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Error compressing backup file at " . DATE . "\n");
             }
         }
     } else {
-        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". "Backup command returned status code " . $return . " at " . DATE . "\n");
+        fwrite($backupLogHandle, "[backup.stream:". $backupStream . "]". " Backup command returned status code " . $return . " at " . DATE . "\n");
     }
+    fclose($backupLogHandle);
+    
 }
 
 function getSystemHealth(){
 
 }
+
 function getSystemInfo(){
     // Get the system information, backups schedule, versions, health, etc
     $systemInfo = [
         'systemName' => 'Tablero de Anuncios',
         'systemVersion' => '1.1',
         'systemHealth' => getSystemHealth(),
-        'systemBackups' => getSystemBackups(),
+        'systemBackups' => 'Backups programados y corriendo.',
         'systemUsers' => getSystemUsers(),
         'systemLogs' => getSystemLogs()
     ];
+
+    return $systemInfo;
 
 }
 function convertToPdf($imageFile, $imageFolder) {
@@ -420,7 +487,7 @@ function fetchSiblingsImages($event) {
         global $sqltable;
         global $conn;
         // Prepara la consulta SQL para obtener las rutas de las imágenes para el evento dado
-        $sql = "SELECT `siblingsPath` FROM $sqltable WHERE `nombre` = '$event'"; 
+        $sql = "SELECT * FROM $sqltable WHERE `nombre` = '$event'"; 
         $result = mysqli_query($conn, $sql);
     
         // Verifica si se obtuvo algún resultado
@@ -428,6 +495,9 @@ function fetchSiblingsImages($event) {
             while ($row = mysqli_fetch_assoc($result)) {
                 // Se separan las rutas de las imágenes usando explode(';')
                 $imagePaths = explode(';', $row['siblingsPath']);
+                $imagePaths[] = $row['fromPdf'];
+                // Add from pdf to the final part of the array
+
             }
         }
         // Devuelve las rutas de las imágenes relacionadas
@@ -445,7 +515,7 @@ function fetchSiblingsImages($event) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $cong ? 'Cartelera' : 'Selecciona una congregación'; ?></title>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 ">
 
 
     <!-- Login Form -->
@@ -481,10 +551,6 @@ function fetchSiblingsImages($event) {
                     <p class="mb-4">Desde aqui puedes subir o borrar anuncios.</p>
                     <hr class="border-t-3 border-gray-300">
                     <br>
-                
-
-                    
-                    
                     <a href="/admin/new-event" class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white">Agregar anuncio</a>
                     <a class="bg-green-500 hover:bg-green-600 rounded py-2 px-4 mt-4 text-white" href="/?congregacion=<?php echo $congregacion; ?>" id="go-to-congregation">Ir a la cartelera de tu congregación</a> <!-- Preview de la cartelera-->
                     <script>
@@ -704,17 +770,49 @@ function fetchSiblingsImages($event) {
                             <option value="acomodadores_microfonistas">Acomodadores y microfonistas</option>
                             <option value="audio_video_plataforma">Audio, video y plataforma</option>
                             <option value="grupos">Grupos para el servicio</option>
-                            <option value="reuniones_entre_semana">Reunión de entre semana (Especificar fecha)</option>
+                            <option value="reuniones_entre_semana">Reunión de entre semana</option>
                             <option value="reuniones_fin_semana">Reunión de fin de semana</option>
+                            <option value="cartas">Cartas</option>
                         </select>
                     </div>
+                    
                     <div class="mb-4">
-                            <label for="date" class="block mb-2">Nueva fecha del programa de reunión (Formato: Año/Mes/Día)</label>
-                            <input type="text" id="date" name="new-eventdate" class="w-full p-2 border rounded">
-                    </div>
-                    <div class="mb-4">
-                        <label for="image" class="block mb-2"> Nueva imagen (PNG o JPG)</label>
+                        <label for="image" class="block mb-2"> Nueva imagen principal (PNG, JPG)</label>
                         <input type="file" id="image" name="new-eventimage" class="w-full p-2 border rounded">
+                    </div>
+                    <div class="mb-4 hidden" id='upload-more-edit'>
+                            <label for="cuantas_semanas" class="block mb-2"> ¿Cuantas imagenes vas a tener que subir? </label>
+                            <select name="cuantas_semanas_int" id="cuantas_semanas_int">
+                                <option value="1-semanas"> 1 Imagen mas la imagen principal (Ej: 2 Semanas o 2 Hojas) </option>
+                                <option value="2-semanas"> 2 Imagenes mas la imagen principal (Ej: 3 Semanas o 3 Hojas)</option>
+                                <option value="3-semanas"> 3 Imagenes mas la imagen principal (Ej: 4 Semanas o 4 Hojas) </option>
+                                <option value="4-semanas"> 4 Imagenes mas la imagen principal (Ej: 5 Semanas o 5 Hojas)</option>
+                                <option value="5-semanas"> 5 Imagenes mas la imagen principal (Ej: 6 Semanas o 6 Hojas)</option>
+                            </select>
+                            <div id="upload-more-input"></div>
+                    <script>
+                            const uploadMoreBlockEdit = document.getElementById('upload-more-edit');
+                            document.getElementById('tema').addEventListener('change', function() {
+                                if (this.value === 'reuniones_entre_semana' | this.value === 'cartas') {
+                                    uploadMoreBlockEdit.classList.remove('hidden');
+                                } else {
+                                    uploadMoreBlockEdit.classList.add('hidden');
+                                }
+                            });
+                            document.getElementById('cuantas_semanas_int').addEventListener('change', function() {
+                                const cuantasSemanas = this.value.split('-')[0];
+                                const uploadMoreBlock = document.getElementById('upload-more-edit');
+                                const uploadMoreInput = document.getElementById('upload-more-input');
+                                uploadMoreInput.innerHTML = '';
+                                for (let i = 0; i < parseInt(cuantasSemanas); i++) {
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.name = 'eventimage' + i;
+                                    input.className = 'w-full p-2 border rounded';
+                                    uploadMoreInput.appendChild(input);
+                                }
+                            });
+                    </script>
                     </div>
                     <button type="submit" name="edit-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Modificar anuncio</button>
                 </form>
@@ -741,23 +839,59 @@ function fetchSiblingsImages($event) {
                                 <option value="acomodadores_microfonistas">Acomodadores y microfonistas</option>
                                 <option value="audio_video_plataforma">Audio, video y plataforma</option>
                                 <option value="grupos">Grupos para el servicio</option>
-                                <option value="reuniones_entre_semana">Reunión de entre semana (Especificar fecha)</option>
+                                <option value="reuniones_entre_semana">Reunión de entre semana</option>
                                 <option value="reuniones_fin_semana">Reunión de fin de semana</option>
+                                <option value="cartas"> Cartas </option>
                             </select>
                         </div>
+
                         <div class="mb-4">
-                            <label for="date" class="block mb-2">Fecha del programa de reunión (Formato: Año/Mes/Día)</label>
-                            <input type="text" id="date" name="eventdate" class="w-full p-2 border rounded">
-                        </div>
-                        <div class="mb-4">
-                            <label for="image" class="block mb-2">Imagen (PNG o JPG)</label>
+                            <label for="image" class="block mb-2">Imagen Principal (PNG o JPG)</label>
                             <input type="file" id="image" name="eventimage" class="w-full p-2 border rounded">
+                        </div>
+                        <div class="mb-4 hidden" id='upload-more'>
+                            <label for="cuantas_semanas" class="block mb-2"> ¿Cuantas imagenes vas a tener que subir? </label>
+                            <select name="cuantas_semanas_int" id="cuantas_semanas_int">
+                                <option value="1-semanas"> 1 Imagen mas la imagen principal (Ej: 2 Semanas o 2 Hojas) </option>
+                                <option value="2-semanas"> 2 Imagenes mas la imagen principal (Ej: 3 Semanas o 3 Hojas)</option>
+                                <option value="3-semanas"> 3 Imagenes mas la imagen principal (Ej: 4 Semanas o 4 Hojas) </option>
+                                <option value="4-semanas"> 4 Imagenes mas la imagen principal (Ej: 5 Semanas o 5 Hojas)</option>
+                                <option value="5-semanas"> 5 Imagenes mas la imagen principal (Ej: 6 Semanas o 6 Hojas)</option>
+                            </select>
+                            <div id="upload-more-input"></div>
+                        
+                        <script>
+                            const uploadMoreBlock = document.getElementById('upload-more');
+                            document.getElementById('tema').addEventListener('change', function() {
+                                if (this.value === 'reuniones_entre_semana' | this.value === 'cartas') {
+                                    uploadMoreBlock.classList.remove('hidden');
+                                } else {
+                                    uploadMoreBlock.classList.add('hidden');
+                                }
+                            });
+                            document.getElementById('cuantas_semanas_int').addEventListener('change', function() {
+                                const cuantasSemanas = this.value.split('-')[0];
+                                const uploadMoreBlock = document.getElementById('upload-more');
+                                const uploadMoreInput = document.getElementById('upload-more-input');
+                                uploadMoreInput.innerHTML = '';
+                                for (let i = 0; i < parseInt(cuantasSemanas); i++) {
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.name = 'eventimage' + i;
+                                    input.className = 'w-full p-2 border rounded';
+                                    uploadMoreInput.appendChild(input);
+                                }
+                            });
+                        </script>
                         </div>
                         <button type="submit" name="create-event" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Añadir anuncio</button>
                     </form>
                 </div>
             </section>
         </div>
+
+    
+    
     <!-- Select Congregation -->
     <?php elseif (!$cong): ?>
         <div class="relative min-h-screen bg-cover bg-center max-w-100vh" style="background-image: url('fondo.jpg');">
@@ -814,8 +948,9 @@ function fetchSiblingsImages($event) {
                             $siblingsImages = fetchSiblingsImages($event['nombre']);
                             // Codificar el array de imágenes hermanas en formato JSON
                             $siblingsImagesJson = json_encode($siblingsImages);
+                            //var_dump($siblingsImagesJson)
                         ?>
-                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-full" style="background-color:'<?php echo $event['color'];?>'">
+                            <div class="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer w-full" style="background-color:<?php echo $event['color'];?>">
                                 <!-- Imagen principal del evento -->
                                 <img src="<?php echo $event['path']; ?>"  
                                     alt="<?php echo htmlspecialchars($event['nombre']); ?> Image" 
@@ -863,16 +998,17 @@ function fetchSiblingsImages($event) {
     let timeoutId;
     let siblingsPath = [];
     let currentIndex = 0; // Índice de navegación
+    let fromPdf = 0; // Variable para determinar el modo de navegación
 
     function changeImage(direction) {
-        if (siblingsPath.length <= 2) return; // No hacer nada si hay 2 imágenes o menos
+        if (siblingsPath.length <= 1) return; // No hacer nada si hay 1 imagen o menos
 
-        const totalPairs = Math.ceil(siblingsPath.length / 2); // Cantidad de pares disponibles
+        const step = fromPdf === 0 ? 1 : 2; // Si fromPdf es 0, avanzar de 1 en 1; si no, de 2 en 2
 
         if (direction === 'next') {
-            currentIndex = (currentIndex + 2) % siblingsPath.length;
+            currentIndex = (currentIndex + step) % siblingsPath.length;
         } else if (direction === 'prev') {
-            currentIndex = (currentIndex - 2 + siblingsPath.length) % siblingsPath.length;
+            currentIndex = (currentIndex - step + siblingsPath.length) % siblingsPath.length;
         }
 
         renderImages();
@@ -892,28 +1028,30 @@ function fetchSiblingsImages($event) {
         siblingsPath = JSON.parse(imgElement.getAttribute('data-siblings-images') || "[]")
             .filter(path => path.trim() !== "");
 
-        console.log("Imágenes hermanas:", siblingsPath);
+        // Obtener el valor de fromPdf
+        fromPdf = parseInt(siblingsPath.pop()) || 0; // Extraer el último valor y convertirlo a número
+        
+        console.log("Imágenes hermanas:", siblingsPath, "From PDF:", fromPdf);
 
         // Reiniciar índice en la imagen seleccionada
         currentIndex = siblingsPath.indexOf(imageSrc);
         if (currentIndex === -1) currentIndex = 0;
 
         renderImages();
-        updateNavigation();
+        updateNavigation(fromPdf);
     }
 
-    // Renderizar imágenes en pares (1-2, 3-4, ...)
+    // Renderizar imágenes en pares o individuales según fromPdf
     function renderImages() {
         const popupImgTag = document.querySelector('.popup-img');
         const popupSiblingImgTag = document.querySelector('.popup-img-siblings');
 
         if (siblingsPath.length === 0) return;
 
-        popupImgTag.src = siblingsPath[currentIndex]; // 1-3-5-7-9-11 en la derecha
+        popupImgTag.src = siblingsPath[currentIndex];
 
-        let nextIndex = currentIndex + 1;
-        if (nextIndex < siblingsPath.length) {
-            popupSiblingImgTag.src = siblingsPath[nextIndex];
+        if (fromPdf !== 0 && currentIndex + 1 < siblingsPath.length) {
+            popupSiblingImgTag.src = siblingsPath[currentIndex + 1];
             popupSiblingImgTag.classList.remove('hidden');
         } else {
             popupSiblingImgTag.classList.add('hidden');
@@ -921,14 +1059,18 @@ function fetchSiblingsImages($event) {
     }
 
     // Mostrar/ocultar navegación
-    function updateNavigation() {
+    function updateNavigation(fromPdf) {
         const leftArrow = document.querySelector('.popup-arrow-left');
         const rightArrow = document.querySelector('.popup-arrow-right');
 
-        const hasMultiplePairs = siblingsPath.length > 2;
-
-        leftArrow.classList.toggle('hidden', !hasMultiplePairs);
-        rightArrow.classList.toggle('hidden', !hasMultiplePairs);
+        if (fromPdf === 0){
+            leftArrow.classList.toggle('hidden', siblingsPath.length <= 1);
+            rightArrow.classList.toggle('hidden', siblingsPath.length <= 1);
+        } else {
+            leftArrow.classList.toggle('hidden', siblingsPath.length <= 2);
+            rightArrow.classList.toggle('hidden', siblingsPath.length <= 2);
+        }
+        
     }
 
     // Cerrar el pop-up

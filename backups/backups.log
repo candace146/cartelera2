@@ -1,54 +1,24 @@
-[backup.stream:1739664945]Backup command returned status code 1 at 2025-03-15-02:10:01
-[backup.stream:372120189]Backup command returned status code 1 at 2025-03-15-02:10:43
-[backup.stream:1369970482]Backup command returned status code Array at 2025-03-15-02:12:54
-[backup.stream:1105843219]Backup command returned status code diferent than 0 at 2025-03-15-02:14:28
-[backup.stream:1186334558]Backup command returned status code Array at 2025-03-15-02:16:27
-[backup.stream:189584273]Backup command returned status code Array at 2025-03-15-02:16:59
-[backup.stream:1609426223]Backup command returned status code Array at 2025-03-15-02:17:46
-[backup.stream:2111010925]Backup command returned status code 1 at 2025-03-15-02:18:24
-[backup.stream:737454599]Backup command returned status code 1 at 2025-03-15-02:18:39
-[backup.stream:1417153908]Backup command returned status code 1 at 2025-03-15-02:18:48
-[backup.stream:49407842]Backup command returned status code 1 at 2025-03-15-02:20:12
-[backup.stream:1585474]Backup command returned status code 1 at 2025-03-15-02:20:25
-[backup.stream:611534368]Backup command returned status code 1 at 2025-03-15-02:23:04
-[backup.stream:1068640041]Backup command returned status code 1 at 2025-03-15-02:23:13
-[backup.stream:1452232447]Backup command returned status code 1 at 2025-03-15-02:24:33
-[backup.stream:2117186306]Backup command returned status code 1 at 2025-03-15-02:25:44
-[backup.stream:24203400]Backup command returned status code 1 at 2025-03-15-02:25:53
-[backup.stream:1438704028]Backup command returned status code 1 at 2025-03-15-02:25:54
-[backup.stream:106937064]Backup command returned status code 1 at 2025-03-15-02:28:31
-[backup.stream:31814258]Backup command returned status code 1 at 2025-03-15-02:28:44
-[backup.stream:34232279]Backup command returned status code 1 at 2025-03-15-13:08:43
-[backup.stream:1093059701]Backup command returned status code 0 at 2025-03-15-13:09:04
-[backup.stream:1093059701]Backup file created at 2025-03-15-13:09:04 founded in:.\backups\backup-2025_03_15_09_09_04.sql
-[backup.stream:1093059701]Compressing backup file at 2025-03-15-13:09:04
-[backup.stream:112390601]Backup command returned status code 0 at 2025-03-15-13:12:56
-[backup.stream:112390601]Backup file created at 2025-03-15-13:12:56 founded in:.\backups\backup-2025_03_15_09_12_56.sql
-[backup.stream:112390601]Compressing backup file at 2025-03-15-13:12:56
-[backup.stream:112390601]Error compressing backup file at 2025-03-15-13:12:56
-[backup.stream:302091441]Backup command returned status code 0 at 2025-03-15-13:21:32
-[backup.stream:302091441]Backup file created at 2025-03-15-13:21:32 founded in:.\backups\backup-2025_03_15_09_21_32.sql
-[backup.stream:302091441]Compressing backup file at 2025-03-15-13:21:32
-[backup.stream:302091441]Backup file compressed at 2025-03-15-13:21:32 founded in:.\backups\backup-2025_03_15_09_21_32.zip
-[backup.stream:665669072]Backup command returned status code 1 at 2025-03-15-13:24:14
-[backup.stream:1064411781]Backup command returned status code 0 at 2025-03-15-13:43:24
-[backup.stream:1064411781]Backup file created at 2025-03-15-13:43:24 founded in:.\backups\backup-2025_03_15_09_43_24.sql
-[backup.stream:1064411781]Compressing backup file at 2025-03-15-13:43:24
-[backup.stream:1064411781]Backup file compressed at 2025-03-15-13:43:24 founded in:.\backups\backup-2025_03_15_09_43_24.zip
-[backup.stream:1804515046]Backup command returned status code 0 at 2025-03-15-13:56:20
-[backup.stream:1804515046]Backup file created at 2025-03-15-13:56:20 founded in:.\backups\backup-2025_03_15_09_56_20.sql
-[backup.stream:1804515046]Compressing backup file at 2025-03-15-13:56:20
-[backup.stream:1804515046]Backup file compressed at 2025-03-15-13:56:20 founded in:.\backups\backup-2025_03_15_09_56_20.zip
-[backup.stream:1804515046]Starting compress folder process at 2025-03-15-13:56:20
-[backup.stream:1804515046]Images folder compressed at 2025-03-15-13:56:20
-[backup.stream:1582807637]Backup command returned status code 0 at 2025-03-15-14:00:05
-[backup.stream:1582807637]Backup file created at 2025-03-15-14:00:05 founded in:.\backups\backup-2025_03_15_10_00_05.sql
-[backup.stream:1582807637]Compressing backup file at 2025-03-15-14:00:05
-[backup.stream:1582807637]Backup file compressed at 2025-03-15-14:00:05 founded in:.\backups\backup-2025_03_15_10_00_05.zip
-[backup.stream:1582807637]Starting compress folder process at 2025-03-15-14:00:05
-[backup.stream:1582807637]Images folder compressed at 2025-03-15-14:00:05
-[backup.stream:1742545913]Backup command returned status code 0 at 2025-03-15-14:14:04
-[backup.stream:1742545913]Backup file created at 2025-03-15-14:14:04 founded in:.\backups\backup-2025_03_15_10_14_04.sql
-[backup.stream:1742545913]Compressing backup file at 2025-03-15-14:14:04
-[backup.stream:1742545913]Backup file compressed at 2025-03-15-14:14:04 founded in:.\backups\backup-2025_03_15_10_14_04.zip
-[backup.stream:1742545913]Starting compress folder process at 2025-03-15-14:14:04
+[backup.stream:1570257448] Backup command returned status code 0 at 2025-03-15-15:52:17
+[backup.stream:1570257448] Backup file created at 2025-03-15-15:52:17 founded in:.\backups\backup-2025_03_15_11_52_17.sql
+[backup.stream:1570257448] Compressing backup file at 2025-03-15-15:52:17
+[backup.stream:1570257448] Backup file compressed at 2025-03-15-15:52:17 founded in:.\backups\backup-2025_03_15_11_52_17.zip
+[backup.stream:1570257448] Starting compress folder process at 2025-03-15-15:52:17
+[backup.stream:1570257448] Images folder compressed at 2025-03-15-15:52:17
+[backup.stream:1038188834] Backup command returned status code 0 at 2025-03-15-15:52:32
+[backup.stream:1038188834] Backup file created at 2025-03-15-15:52:32 founded in:.\backups\backup-2025_03_15_11_52_32.sql
+[backup.stream:1038188834] Compressing backup file at 2025-03-15-15:52:32
+[backup.stream:1038188834] Backup file compressed at 2025-03-15-15:52:32 founded in:.\backups\backup-2025_03_15_11_52_32.zip
+[backup.stream:1038188834] Starting compress folder process at 2025-03-15-15:52:32
+[backup.stream:1038188834] Images folder compressed at 2025-03-15-15:52:32
+[backup.stream:3232517] Backup command returned status code 0 at 2025-03-15-17:14:06
+[backup.stream:3232517] Backup file created at 2025-03-15-17:14:06 founded in:.\backups\backup-2025_03_15_13_14_06.sql
+[backup.stream:3232517] Compressing backup file at 2025-03-15-17:14:06
+[backup.stream:3232517] Backup file compressed at 2025-03-15-17:14:06 founded in:.\backups\backup-2025_03_15_13_14_06.zip
+[backup.stream:3232517] Starting compress folder process at 2025-03-15-17:14:06
+[backup.stream:3232517] Images folder compressed at 2025-03-15-17:14:06
+[backup.stream:181685087] Backup command returned status code 0 at 2025-03-15-17:14:43
+[backup.stream:181685087] Backup file created at 2025-03-15-17:14:43 founded in:.\backups\backup-2025_03_15_13_14_43.sql
+[backup.stream:181685087] Compressing backup file at 2025-03-15-17:14:43
+[backup.stream:181685087] Backup file compressed at 2025-03-15-17:14:43 founded in:.\backups\backup-2025_03_15_13_14_43.zip
+[backup.stream:181685087] Starting compress folder process at 2025-03-15-17:14:43
+[backup.stream:181685087] Images folder compressed at 2025-03-15-17:14:43
